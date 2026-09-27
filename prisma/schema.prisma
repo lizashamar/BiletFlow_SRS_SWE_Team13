@@ -1,0 +1,122 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  ATTENDEE
+  ORGANIZER
+  EVENT_ADMIN
+  PLATFORM_ADMIN
+}
+
+enum TicketStatus {
+  VALID
+  CHECKED_IN
+  CANCELLED
+  REFUNDED
+}
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  email        String     @unique @db.VarChar(255)
+  passwordHash String     @map("password_hash") @db.VarChar(255)
+  fullName     String     @map("full_name") @db.VarChar(255)
+  role         UserRole   @default(ATTENDEE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  events       Event[]    @relation("OrganizerEvents")
+  orders       Order[]
+  checkIns     CheckIn[]  @relation("ScannedBy")
+
+  @@map("users")
+}
+
+model Event {
+  id              Int          @id @default(autoincrement())
+  organizerId     Int          @map("organizer_id")
+  organizer       User         @relation("OrganizerEvents", fields: [organizerId], references: [id], onDelete: Cascade)
+  title           String       @db.VarChar(255)
+  description     String?      @db.Text
+  venueName       String       @map("venue_name") @db.VarChar(255)
+  venueAddress    String       @map("venue_address") @db.VarChar(255)
+  startTime       DateTime     @map("start_time")
+  endTime         DateTime     @map("end_time")
+  capacity        Int
+  isPublished     Boolean      @default(false) @map("is_published")
+  paidSalesActive Boolean      @default(false) @map("paid_sales_active")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  ticketTypes     TicketType[]
+  orders          Order[]
+
+  @@map("events")
+}
+
+model TicketType {
+  id                Int      @id @default(autoincrement())
+  eventId           Int      @map("event_id")
+  event             Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name              String   @db.VarChar(100)
+  price             Decimal  @default(0.00) @db.Decimal(10, 2)
+  totalQuantity     Int      @map("total_quantity")
+  remainingQuantity Int      @map("remaining_quantity")
+  isPaid            Boolean  @default(false) @map("is_paid")
+
+  tickets           Ticket[]
+
+  @@map("ticket_types")
+}
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  userId      Int         @map("user_id")
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId     Int         @map("event_id")
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  totalAmount Decimal     @map("total_amount") @db.Decimal(10, 2)
+  status      OrderStatus @default(PENDING)
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  tickets     Ticket[]
+
+  @@map("orders")
+}
+
+model Ticket {
+  id           Int          @id @default(autoincrement())
+  orderId      Int          @map("order_id")
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketTypeId Int          @map("ticket_type_id")
+  ticketType   TicketType   @relation(fields: [ticketTypeId], references: [id])
+  attendeeName String       @map("attendee_name") @db.VarChar(255)
+  qrCodeHash   String       @unique @map("qr_code_hash") @db.VarChar(255)
+  status       TicketStatus @default(VALID)
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  checkIns     CheckIn[]
+
+  @@map("tickets")
+}
+
+model CheckIn {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int      @map("ticket_id")
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  scannedBy Int?     @map("scanned_by")
+  scanner   User?    @relation("ScannedBy", fields: [scannedBy], references: [id])
+  scannedAt DateTime @default(now()) @map("scanned_at")
+
+  @@map("check_ins")
+}
