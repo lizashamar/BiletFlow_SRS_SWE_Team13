@@ -19,5 +19,31 @@
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^5.0.0",
     "vite": "^7.0.0"
+  "name": "biletflow_srs_swe_team13",
+  "version": "1.0.0",
+  "description": "BiletFlow — Self-service event ticketing and digital pass verification platform tailored for Kazakhstan. Built for CSCI 361 (Fall 2026).",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lizashamar/BiletFlow_SRS_SWE_Team13.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lizashamar/BiletFlow_SRS_SWE_Team13/issues"
+  },
+  "homepage": "https://github.com/lizashamar/BiletFlow_SRS_SWE_Team13#readme",
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }
