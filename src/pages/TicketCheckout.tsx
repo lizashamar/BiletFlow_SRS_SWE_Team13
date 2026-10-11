@@ -1,4 +1,5 @@
 import { useState } from "react"
+import type { FormEvent } from "react"
 import type { Event } from "../App"
 
 type Props = {
@@ -17,7 +18,7 @@ function TicketCheckout({ event, onBack }: Props) {
 
   const total = event.price * quantity
 
-  const submitOrder = async (e: React.FormEvent<HTMLFormElement>) => {
+  const submitOrder = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
     setError("")
