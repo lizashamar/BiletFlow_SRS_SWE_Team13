@@ -12,7 +12,7 @@ exports.login = async (req, res) => {
       return res.status(400).json({ error: 'Invalid email or password' });
     }
 
-    const validPassword = await bcrypt.compare(password, user.password).catch(() => password === user.password);
+    const validPassword = await bcrypt.compare(password, user.passwordHash).catch(() => password === user.passwordHash);
     if (!validPassword) {
       return res.status(400).json({ error: 'Invalid email or password' });
     }
@@ -26,7 +26,7 @@ exports.login = async (req, res) => {
     res.json({
       message: 'Login successful',
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role }
+      user: { id: user.id, name: user.fullName, email: user.email, role: user.role }
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
