@@ -1,14 +1,11 @@
-
 import { useEffect, useState } from "react"
+import type { Event } from "../App"
 
-type Event = {
-  id: number
-  title: string
-  price: number
-  date: string
+type Props = {
+  onSelectEvent: (event: Event) => void
 }
 
-function EventCatalog() {
+function EventCatalog({ onSelectEvent }: Props) {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -19,14 +16,14 @@ function EventCatalog() {
         const response = await fetch("http://localhost:5000/api/events")
 
         if (!response.ok) {
-          throw new Error("Failed to load events.")
+          throw new Error("The server could not load events.")
         }
 
         const data: Event[] = await response.json()
         setEvents(data)
       } catch {
         setError(
-          "Could not load events. Please check whether the backend server is running."
+          "Could not load events. Check that the backend is running."
         )
       } finally {
         setLoading(false)
@@ -35,6 +32,15 @@ function EventCatalog() {
 
     fetchEvents()
   }, [])
+
+  const buttonStyle = {
+    backgroundColor: "#111827",
+    color: "white",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "6px",
+    cursor: "pointer",
+  }
 
   return (
     <main
@@ -45,16 +51,13 @@ function EventCatalog() {
       }}
     >
       <h1>Discover Events</h1>
-
       <p style={{ color: "#666" }}>
         Find your next event on BiletFlow.
       </p>
 
       {loading && <p>Loading events...</p>}
 
-      {error && (
-        <p style={{ color: "red" }}>{error}</p>
-      )}
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
       {!loading && !error && events.length === 0 && (
         <p>No events are available right now.</p>
@@ -80,32 +83,16 @@ function EventCatalog() {
               }}
             >
               <h2>{event.title}</h2>
-
+              <p>📅 {new Date(event.date).toLocaleDateString()}</p>
               <p>
-                📅{" "}
-                {new Date(event.date).toLocaleDateString()}
-              </p>
-
-              <p>
-                <strong>
-                  {event.price.toLocaleString()} ₸
-                </strong>
+                <strong>{event.price.toLocaleString()} ₸</strong>
               </p>
 
               <button
-                onClick={() =>
-                  alert(`You selected: ${event.title}`)
-                }
-                style={{
-                  backgroundColor: "#111827",
-                  color: "white",
-                  border: "none",
-                  padding: "10px 16px",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                }}
+                style={buttonStyle}
+                onClick={() => onSelectEvent(event)}
               >
-                View Event
+                Select Event
               </button>
             </div>
           ))}
