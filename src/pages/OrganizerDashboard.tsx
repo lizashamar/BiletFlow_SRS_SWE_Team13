@@ -1,79 +1,175 @@
-const events = [
-  {
-    id: 1,
-    title: "Tech Conference 2026",
-    date: "September 30, 2026",
-    ticketsSold: 120,
-    revenue: 600000,
-  },
-  {
-    id: 2,
-    title: "Jazz Night",
-    date: "October 5, 2026",
-    ticketsSold: 75,
-    revenue: 600000,
-  },
-]
+import { useEffect, useState } from "react"
+
+type OrganizerEvent = {
+  id: number
+  title: string
+  date: string
+}
+
+type Attendee = {
+  name: string
+  email: string
+  eventTitle: string
+}
+
+type DashboardData = {
+  events: OrganizerEvent[]
+  attendees: Attendee[]
+  ticketsSold: number
+  totalSales: number
+}
 
 function OrganizerDashboard() {
-  const totalTickets = events.reduce(
-    (sum, event) => sum + event.ticketsSold,
-    0
-  )
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
-  const totalRevenue = events.reduce(
-    (sum, event) => sum + event.revenue,
-    0
-  )
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        const response = await fetch(
+          "http://localhost:5000/api/organizer/dashboard"
+        )
+
+        if (!response.ok) {
+          throw new Error(
+            "The organizer dashboard API is not available yet."
+          )
+        }
+
+        const result: DashboardData = await response.json()
+        setData(result)
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not load dashboard information."
+        )
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDashboard()
+  }, [])
 
   return (
-    <main className="page-container">
+    <main
+      style={{
+        maxWidth: "1200px",
+        margin: "0 auto",
+        padding: "40px 24px",
+      }}
+    >
       <h1>Organizer Dashboard</h1>
-      <p className="muted">
+      <p style={{ color: "#666" }}>
         Manage your events and track ticket sales.
       </p>
 
-      <section className="stats-grid">
-        <div className="panel">
-          <p className="muted">Total Events</p>
-          <h2>{events.length}</h2>
-        </div>
+      {loading && <p>Loading dashboard...</p>}
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
-        <div className="panel">
-          <p className="muted">Tickets Sold</p>
-          <h2>{totalTickets}</h2>
-        </div>
-
-        <div className="panel">
-          <p className="muted">Total Revenue</p>
-          <h2>{totalRevenue.toLocaleString()} ₸</h2>
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>Your Events</h2>
-
-        {events.map((event) => (
-          <article className="event-row" key={event.id}>
-            <div>
-              <h3>{event.title}</h3>
-              <p className="muted">{event.date}</p>
-              <p>Tickets sold: {event.ticketsSold}</p>
-              <p>Revenue: {event.revenue.toLocaleString()} ₸</p>
+      {data && (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "16px",
+              margin: "24px 0",
+            }}
+          >
+            <div style={cardStyle}>
+              <p>My Events</p>
+              <h2>{data.events.length}</h2>
             </div>
-          </article>
-        ))}
-      </section>
 
-      <section className="panel">
-        <h2>Attendee List</h2>
-        <p className="muted">
-          Attendee information will appear here after the backend
-          attendee endpoint is connected.
-        </p>
-      </section>
+            <div style={cardStyle}>
+              <p>Tickets Sold</p>
+              <h2>{data.ticketsSold}</h2>
+            </div>
+
+            <div style={cardStyle}>
+              <p>Total Sales</p>
+              <h2>{data.totalSales.toLocaleString()} ₸</h2>
+            </div>
+          </div>
+
+          <h2>My Events</h2>
+
+          {data.events.length === 0 ? (
+            <p>You have not created any events yet.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={cellStyle}>Event</th>
+                    <th style={cellStyle}>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.events.map((event) => (
+                    <tr key={event.id}>
+                      <td style={cellStyle}>{event.title}</td>
+                      <td style={cellStyle}>
+                        {new Date(event.date).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h2 style={{ marginTop: "36px" }}>Attendee List</h2>
+
+          {data.attendees.length === 0 ? (
+            <p>No attendee information is available.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={cellStyle}>Name</th>
+                    <th style={cellStyle}>Email</th>
+                    <th style={cellStyle}>Event</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.attendees.map((attendee, index) => (
+                    <tr key={`${attendee.email}-${index}`}>
+                      <td style={cellStyle}>{attendee.name}</td>
+                      <td style={cellStyle}>{attendee.email}</td>
+                      <td style={cellStyle}>{attendee.eventTitle}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </main>
   )
+}
+
+const cardStyle = {
+  backgroundColor: "white",
+  padding: "20px",
+  borderRadius: "10px",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+}
+
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "collapse" as const,
+  textAlign: "left" as const,
+}
+
+const cellStyle = {
+  padding: "12px",
+  borderBottom: "1px solid #ddd",
 }
 
 export default OrganizerDashboard
