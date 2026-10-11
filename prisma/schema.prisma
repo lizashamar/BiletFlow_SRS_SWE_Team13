@@ -106,7 +106,8 @@ model Ticket {
   createdAt    DateTime     @default(now()) @map("created_at")
 
   checkIns     CheckIn[]
-
+  @@index([status])
+  @@index([ticketTypeId])
   @@map("tickets")
 }
 
