@@ -1,0 +1,118 @@
+import { useEffect, useState } from "react";
+import type { Event } from "../App";
+
+export default function OrganizerDashboard() {
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function loadEvents() {
+      try {
+        const response = await fetch("http://localhost:5000/api/events");
+
+        if (!response.ok) {
+          throw new Error("Could not load events.");
+        }
+
+        const data = await response.json();
+
+        if (!Array.isArray(data)) {
+          throw new Error("Unexpected response from the server.");
+        }
+
+        setEvents(data);
+      } catch {
+        setError("Could not connect to the events API.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadEvents();
+  }, []);
+
+  const cardStyle = {
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    padding: "20px",
+    background: "white",
+    color: "#111827",
+  };
+
+  return (
+    <main style={{ maxWidth: "1100px", margin: "32px auto", padding: "24px" }}>
+      <h1>Organizer Dashboard</h1>
+      <p>Manage your events and monitor ticket sales.</p>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gap: "16px",
+          margin: "24px 0",
+        }}
+      >
+        <section style={cardStyle}>
+          <h3>Events returned by API</h3>
+          <p style={{ fontSize: "28px", fontWeight: "bold" }}>
+            {loading ? "…" : error ? "—" : events.length}
+          </p>
+          <small>This is not a verified count of your own events.</small>
+        </section>
+
+        <section style={cardStyle}>
+          <h3>Tickets Sold</h3>
+          <p style={{ fontSize: "28px", fontWeight: "bold" }}>—</p>
+          <small>Sales statistics API not available.</small>
+        </section>
+
+        <section style={cardStyle}>
+          <h3>Attendees</h3>
+          <p style={{ fontSize: "28px", fontWeight: "bold" }}>—</p>
+          <small>Organizer attendee-list API not available.</small>
+        </section>
+      </div>
+
+      <section style={cardStyle}>
+        <h2>Events</h2>
+
+        {loading && <p>Loading events...</p>}
+        {error && <p role="alert">{error}</p>}
+
+        {!loading && !error && events.length === 0 && (
+          <p>No events were returned by the API.</p>
+        )}
+
+        {!loading &&
+          !error &&
+          events.map((event) => (
+            <article
+              key={event.id}
+              style={{
+                padding: "16px 0",
+                borderBottom: "1px solid #e5e7eb",
+              }}
+            >
+              <h3>{event.title}</h3>
+              <p>
+                Date:{" "}
+                {event.startTime || event.date
+                  ? new Date(event.startTime || event.date!).toLocaleString()
+                  : "Not provided"}
+              </p>
+              <p>
+                Ticket types:{" "}
+                {event.ticketTypes ? event.ticketTypes.length : "Not provided"}
+              </p>
+            </article>
+          ))}
+      </section>
+
+      <p style={{ color: "#6b7280", marginTop: "20px" }}>
+        Note: the current API returns sample events. Organizer-specific events,
+        attendee lists, and sales totals require backend support.
+      </p>
+    </main>
+  );
+}
