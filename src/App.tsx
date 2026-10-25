@@ -1,8 +1,10 @@
+
 import { useState } from "react"
 import EventCatalog from "./pages/EventCatalog"
 import CreateEvent from "./pages/CreateEvent"
 import TicketCheckout from "./pages/TicketCheckout"
 import OrganizerDashboard from "./pages/OrganizerDashboard"
+import TicketPass from "./pages/TicketPass"
 
 export type Event = {
   id: number
@@ -11,7 +13,7 @@ export type Event = {
   date: string
 }
 
-type Page = "events" | "create" | "checkout" | "dashboard"
+type Page = "events" | "create" | "checkout" | "dashboard" | "ticket"
 
 function App() {
   const [page, setPage] = useState<Page>("events")
@@ -25,6 +27,7 @@ function App() {
   return (
     <div>
       <nav
+        className="app-nav"
         style={{
           backgroundColor: "#111827",
           padding: "16px 32px",
@@ -43,6 +46,7 @@ function App() {
           <button onClick={() => setPage("dashboard")}>
             Organizer Dashboard
           </button>
+          <button onClick={() => setPage("ticket")}>My Ticket</button>
         </div>
       </nav>
 
@@ -60,6 +64,8 @@ function App() {
       )}
 
       {page === "dashboard" && <OrganizerDashboard />}
+
+      {page === "ticket" && <TicketPass />}
     </div>
   )
 }
