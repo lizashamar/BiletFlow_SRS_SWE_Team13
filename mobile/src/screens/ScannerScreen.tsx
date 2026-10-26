@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   Pressable,
@@ -13,9 +13,30 @@ import {
   useCameraPermissions,
 } from "expo-camera";
 
+import NetInfo from "@react-native-community/netinfo";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../context/AuthContext";
+
+import {
+  verifyAndCheckInTicket,
+} from "../services/checkIn";
+
+import {
+  cacheScan,
+  wasRecentlyScanned,
+} from "../storage/scanCache";
+
+import type {
+  CheckInStatus,
+} from "../types/checkIn";
+
+type ScanUiStatus =
+  | CheckInStatus
+  | "DUPLICATE"
+  | "OFFLINE"
+  | "ERROR"
+  | null;
 
 export default function ScannerScreen() {
   const { session, signOut } = useAuth();
@@ -26,14 +47,138 @@ export default function ScannerScreen() {
   const [scannedValue, setScannedValue] =
     useState<string | null>(null);
 
-  function handleBarcodeScanned(
+  const [scanStatus, setScanStatus] =
+    useState<ScanUiStatus>(null);
+
+  const [statusMessage, setStatusMessage] =
+    useState("");
+
+  const [isOnline, setIsOnline] =
+    useState(true);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(
+      (state) => {
+        setIsOnline(
+          state.isConnected === true
+        );
+      }
+    );
+
+    return unsubscribe;
+  }, []);
+
+  async function handleBarcodeScanned(
     result: BarcodeScanningResult
   ) {
     if (scannedValue) {
       return;
     }
 
-    setScannedValue(result.data);
+    const qrToken = result.data;
+
+    setScannedValue(qrToken);
+    setScanStatus(null);
+    setStatusMessage("");
+
+    try {
+      const duplicate =
+        await wasRecentlyScanned(qrToken);
+
+      if (duplicate) {
+        setScanStatus("DUPLICATE");
+
+        setStatusMessage(
+          "This ticket was recently scanned on this device."
+        );
+
+        return;
+      }
+
+      if (!isOnline) {
+        await cacheScan(
+          qrToken,
+          "OFFLINE"
+        );
+
+        setScanStatus("OFFLINE");
+
+        setStatusMessage(
+          "No network connection. Ticket could not be verified with the server."
+        );
+
+        return;
+      }
+
+      if (!session?.token) {
+        setScanStatus("ERROR");
+
+        setStatusMessage(
+          "Authentication session is missing."
+        );
+
+        return;
+      }
+
+      const response =
+        await verifyAndCheckInTicket(
+          qrToken,
+          session.token
+        );
+
+      await cacheScan(
+        qrToken,
+        response.status
+      );
+
+      setScanStatus(response.status);
+
+      setStatusMessage(
+        response.message
+      );
+    } catch (error) {
+      setScanStatus("ERROR");
+
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to verify ticket."
+      );
+    }
+  }
+
+  function resetScanner() {
+    setScannedValue(null);
+    setScanStatus(null);
+    setStatusMessage("");
+  }
+
+  function getStatusTitle() {
+    switch (scanStatus) {
+      case "VALID":
+        return "Valid ticket";
+
+      case "ALREADY_CHECKED_IN":
+        return "Already checked in";
+
+      case "INVALID":
+        return "Invalid ticket";
+
+      case "CANCELLED":
+        return "Cancelled ticket";
+
+      case "DUPLICATE":
+        return "Duplicate scan";
+
+      case "OFFLINE":
+        return "Offline";
+
+      case "ERROR":
+        return "Verification error";
+
+      default:
+        return "QR scanned";
+    }
   }
 
   if (!permission) {
@@ -108,6 +253,10 @@ export default function ScannerScreen() {
               {session?.user.name ??
                 session?.user.email}
             </Text>
+
+            <Text style={styles.connectionText}>
+              {isOnline ? "Online" : "Offline"}
+            </Text>
           </View>
 
           <Pressable
@@ -131,7 +280,7 @@ export default function ScannerScreen() {
         {scannedValue ? (
           <View style={styles.resultCard}>
             <Text style={styles.resultLabel}>
-              QR scanned
+              {getStatusTitle()}
             </Text>
 
             <Text
@@ -142,15 +291,12 @@ export default function ScannerScreen() {
             </Text>
 
             <Text style={styles.resultNote}>
-              Scanning is paused to prevent duplicate
-              scans.
+              {statusMessage}
             </Text>
 
             <Pressable
               style={styles.primaryButton}
-              onPress={() =>
-                setScannedValue(null)
-              }
+              onPress={resetScanner}
             >
               <Text style={styles.primaryButtonText}>
                 Scan another ticket
@@ -246,6 +392,12 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
+  connectionText: {
+    color: "#d1d5db",
+    marginTop: 4,
+    fontSize: 12,
+  },
+
   logoutButton: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -305,6 +457,7 @@ const styles = StyleSheet.create({
   resultLabel: {
     color: "#86efac",
     fontWeight: "800",
+    fontSize: 18,
   },
 
   resultValue: {
