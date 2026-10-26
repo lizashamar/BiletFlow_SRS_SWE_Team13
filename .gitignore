@@ -128,7 +128,13 @@ dist
 # pnpm
 .pnpm-store
 
-# yarn v3
+.claude/
+.windsurf/
+.agents/
+
+backups/
+
+# yarn v3cd ..
 .pnp.*
 .yarn/*
 !.yarn/patches
