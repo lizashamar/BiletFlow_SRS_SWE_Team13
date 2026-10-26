@@ -143,3 +143,8 @@ vite.config.ts.timestamp-*
 .vite/
 
 /generated/prisma
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
+.DS_Store
