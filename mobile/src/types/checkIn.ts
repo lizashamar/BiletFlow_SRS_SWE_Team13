@@ -1,22 +1,44 @@
-export type CheckInStatus =
+export type VerifyStatus =
+  | "CHECKED_IN"
   | "VALID"
-  | "INVALID"
   | "ALREADY_CHECKED_IN"
-  | "CANCELLED";
+  | "REJECTED"
+  | "INVALID"
+  | "WRONG_EVENT"
+  | "TEMPORARY_ERROR";
 
-export type CheckInResponse = {
-  status: CheckInStatus;
-  message: string;
+export type VerifyResponse = {
+  status: VerifyStatus;
+  message?: string;
 
   ticket?: {
-    id: number;
+    id?: number;
     attendeeName?: string;
-    eventName?: string;
   };
 };
 
-export type CachedScan = {
+export type ManifestTicket = {
+  digest: string;
+  status: string;
+};
+
+export type OfflineManifest = {
+  eventId: number;
+  tickets: ManifestTicket[];
+  downloadedAt: string;
+};
+
+export type OfflineScan = {
   qrToken: string;
+  eventId: number;
   scannedAt: string;
-  status: CheckInStatus | "OFFLINE";
+};
+
+export type SyncScanResult = {
+  status: string;
+  message?: string;
+};
+
+export type SyncResponse = {
+  results: SyncScanResult[];
 };
