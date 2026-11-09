@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "BiletFlow Staff",
+    "slug": "biletflow-staff",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow BiletFlow Staff to access the camera to scan event tickets."
+        }
+      ],
+      "expo-secure-store"
+    ]
+  }
+}
