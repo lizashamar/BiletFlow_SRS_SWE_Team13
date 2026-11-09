@@ -14,29 +14,52 @@ import {
 } from "expo-camera";
 
 import NetInfo from "@react-native-community/netinfo";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../context/AuthContext";
 
 import {
-  verifyAndCheckInTicket,
+  getOfflineManifest,
+  syncOfflineScans,
+  verifyTicketOnline,
 } from "../services/checkIn";
 
 import {
-  cacheScan,
+  verifyTicketOffline,
+} from "../services/offlineVerification";
+
+import {
+  getManifest,
+  saveManifest,
+} from "../storage/manifestStorage";
+
+import {
+  addOfflineScan,
+  clearOfflineQueue,
+  getOfflineQueue,
+} from "../storage/offlineScanQueue";
+
+import {
   wasRecentlyScanned,
 } from "../storage/scanCache";
 
 import type {
-  CheckInStatus,
+  VerifyStatus,
 } from "../types/checkIn";
 
+
 type ScanUiStatus =
-  | CheckInStatus
+  | VerifyStatus
   | "DUPLICATE"
   | "OFFLINE"
+  | "SYNCED"
   | "ERROR"
   | null;
+
+
+const EVENT_ID = 1;
+
 
 export default function ScannerScreen() {
   const { session, signOut } = useAuth();
@@ -56,17 +79,167 @@ export default function ScannerScreen() {
   const [isOnline, setIsOnline] =
     useState(true);
 
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(
-      (state) => {
-        setIsOnline(
-          state.isConnected === true
+  const [isManifestAvailable, setIsManifestAvailable] =
+    useState(false);
+
+  const [isDownloadingManifest, setIsDownloadingManifest] =
+    useState(false);
+
+  const [isSyncing, setIsSyncing] =
+    useState(false);
+
+  const [offlineQueueCount, setOfflineQueueCount] =
+    useState(0);
+
+
+  async function refreshOfflineQueueCount() {
+    const queue = await getOfflineQueue();
+
+    setOfflineQueueCount(queue.length);
+  }
+
+
+  async function checkStoredManifest() {
+    const manifest = await getManifest(EVENT_ID);
+
+    setIsManifestAvailable(Boolean(manifest));
+  }
+
+
+  async function downloadManifest() {
+    if (!session?.token) {
+      setScanStatus("ERROR");
+
+      setStatusMessage(
+        "Authentication session is missing."
+      );
+
+      return;
+    }
+
+    if (!isOnline) {
+      setScanStatus("OFFLINE");
+
+      setStatusMessage(
+        "Connect to the internet before downloading the offline manifest."
+      );
+
+      return;
+    }
+
+    setIsDownloadingManifest(true);
+
+    try {
+      const manifest =
+        await getOfflineManifest(
+          EVENT_ID,
+          session.token
         );
+
+      await saveManifest(manifest);
+
+      setIsManifestAvailable(true);
+
+      setScanStatus("SYNCED");
+
+      setStatusMessage(
+        `Offline manifest downloaded successfully for event ${EVENT_ID}.`
+      );
+    } catch (error) {
+      setScanStatus("ERROR");
+
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to download offline manifest."
+      );
+    } finally {
+      setIsDownloadingManifest(false);
+    }
+  }
+
+
+  async function syncQueuedScans() {
+    if (!session?.token) {
+      return;
+    }
+
+    if (!isOnline) {
+      return;
+    }
+
+    if (isSyncing) {
+      return;
+    }
+
+    setIsSyncing(true);
+
+    try {
+      const queue =
+        await getOfflineQueue();
+
+      if (queue.length === 0) {
+        setOfflineQueueCount(0);
+
+        return;
       }
-    );
+
+      const batch =
+        queue.slice(0, 200);
+
+      await syncOfflineScans(
+        batch,
+        session.token
+      );
+
+      await clearOfflineQueue();
+
+      setOfflineQueueCount(0);
+
+      setScanStatus("SYNCED");
+
+      setStatusMessage(
+        `${batch.length} offline scan(s) synchronized successfully.`
+      );
+    } catch (error) {
+      console.log(
+        "Offline sync failed:",
+        error
+      );
+
+      setStatusMessage(
+        "Offline scans are still queued and will be synchronized later."
+      );
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+
+  useEffect(() => {
+    void checkStoredManifest();
+    void refreshOfflineQueueCount();
+  }, []);
+
+
+  useEffect(() => {
+    const unsubscribe =
+      NetInfo.addEventListener(
+        (state) => {
+          const online =
+            state.isConnected === true;
+
+          setIsOnline(online);
+
+          if (online) {
+            void syncQueuedScans();
+          }
+        }
+      );
 
     return unsubscribe;
-  }, []);
+  }, [session?.token]);
+
 
   async function handleBarcodeScanned(
     result: BarcodeScanningResult
@@ -78,94 +251,219 @@ export default function ScannerScreen() {
     const qrToken = result.data;
 
     setScannedValue(qrToken);
+
     setScanStatus(null);
-    setStatusMessage("");
+
+    setStatusMessage(
+      "Processing ticket..."
+    );
 
     try {
       const duplicate =
-        await wasRecentlyScanned(qrToken);
+        await wasRecentlyScanned(
+          qrToken
+        );
 
       if (duplicate) {
-        setScanStatus("DUPLICATE");
+        setScanStatus(
+          "DUPLICATE"
+        );
 
         setStatusMessage(
-          "This ticket was recently scanned on this device."
+          "This ticket was already scanned recently on this device."
         );
 
         return;
       }
 
-      if (!isOnline) {
-        await cacheScan(
-          qrToken,
+
+      if (isOnline) {
+        if (!session?.token) {
+          setScanStatus(
+            "ERROR"
+          );
+
+          setStatusMessage(
+            "Authentication session is missing."
+          );
+
+          return;
+        }
+
+        const response =
+          await verifyTicketOnline(
+            qrToken,
+            EVENT_ID,
+            session.token
+          );
+
+        setScanStatus(
+          response.status
+        );
+
+        setStatusMessage(
+          response.message ??
+            getDefaultStatusMessage(
+              response.status
+            )
+        );
+
+        return;
+      }
+
+
+      const manifest =
+        await getManifest(
+          EVENT_ID
+        );
+
+      if (!manifest) {
+        setScanStatus(
           "OFFLINE"
         );
 
-        setScanStatus("OFFLINE");
-
         setStatusMessage(
-          "No network connection. Ticket could not be verified with the server."
+          "No offline manifest is available. Connect to the internet and download the manifest first."
         );
 
         return;
       }
 
-      if (!session?.token) {
-        setScanStatus("ERROR");
 
-        setStatusMessage(
-          "Authentication session is missing."
-        );
-
-        return;
-      }
-
-      const response =
-        await verifyAndCheckInTicket(
+      const offlineResult =
+        await verifyTicketOffline(
           qrToken,
-          session.token
+          manifest
         );
 
-      await cacheScan(
-        qrToken,
-        response.status
-      );
 
-      setScanStatus(response.status);
+      if (
+        offlineResult ===
+        "INVALID"
+      ) {
+        setScanStatus(
+          "INVALID"
+        );
+
+        setStatusMessage(
+          "Ticket was not found in the offline manifest."
+        );
+
+        return;
+      }
+
+
+      if (
+        offlineResult ===
+        "ALREADY_CHECKED_IN"
+      ) {
+        setScanStatus(
+          "ALREADY_CHECKED_IN"
+        );
+
+        setStatusMessage(
+          "This ticket was already checked in before the manifest was downloaded."
+        );
+
+        return;
+      }
+
+
+      await addOfflineScan({
+        qrToken,
+        eventId: EVENT_ID,
+        scannedAt:
+          new Date().toISOString(),
+      });
+
+
+      await refreshOfflineQueueCount();
+
+
+      setScanStatus(
+        "OFFLINE"
+      );
 
       setStatusMessage(
-        response.message
+        "Ticket accepted offline and added to the synchronization queue."
       );
+
     } catch (error) {
-      setScanStatus("ERROR");
+      setScanStatus(
+        "ERROR"
+      );
 
       setStatusMessage(
         error instanceof Error
           ? error.message
-          : "Unable to verify ticket."
+          : "Unable to process ticket."
       );
     }
   }
 
+
   function resetScanner() {
     setScannedValue(null);
+
     setScanStatus(null);
+
     setStatusMessage("");
   }
 
+
+  function getDefaultStatusMessage(
+    status: VerifyStatus
+  ) {
+    switch (status) {
+      case "CHECKED_IN":
+        return "Ticket checked in successfully.";
+
+      case "VALID":
+        return "Ticket is valid.";
+
+      case "ALREADY_CHECKED_IN":
+        return "Ticket has already been checked in.";
+
+      case "REJECTED":
+        return "Ticket was rejected.";
+
+      case "INVALID":
+        return "Ticket is invalid.";
+
+      case "WRONG_EVENT":
+        return "Ticket belongs to a different event.";
+
+      case "TEMPORARY_ERROR":
+        return "Temporary verification error.";
+
+      default:
+        return "Ticket processed.";
+    }
+  }
+
+
   function getStatusTitle() {
     switch (scanStatus) {
+      case "CHECKED_IN":
+        return "Checked in";
+
       case "VALID":
         return "Valid ticket";
 
       case "ALREADY_CHECKED_IN":
         return "Already checked in";
 
+      case "REJECTED":
+        return "Rejected ticket";
+
       case "INVALID":
         return "Invalid ticket";
 
-      case "CANCELLED":
-        return "Cancelled ticket";
+      case "WRONG_EVENT":
+        return "Wrong event";
+
+      case "TEMPORARY_ERROR":
+        return "Temporary error";
 
       case "DUPLICATE":
         return "Duplicate scan";
@@ -173,13 +471,17 @@ export default function ScannerScreen() {
       case "OFFLINE":
         return "Offline";
 
+      case "SYNCED":
+        return "Synchronization complete";
+
       case "ERROR":
-        return "Verification error";
+        return "Error";
 
       default:
         return "QR scanned";
     }
   }
+
 
   if (!permission) {
     return (
@@ -191,35 +493,61 @@ export default function ScannerScreen() {
     );
   }
 
+
   if (!permission.granted) {
     return (
       <SafeAreaView
-        style={styles.permissionContainer}
+        style={
+          styles.permissionContainer
+        }
         edges={["bottom"]}
       >
-        <View style={styles.permissionCard}>
-          <Text style={styles.permissionTitle}>
+        <View
+          style={
+            styles.permissionCard
+          }
+        >
+          <Text
+            style={
+              styles.permissionTitle
+            }
+          >
             Camera access required
           </Text>
 
-          <Text style={styles.infoText}>
-            BiletFlow needs camera access to scan
-            ticket QR codes.
+          <Text
+            style={styles.infoText}
+          >
+            BiletFlow needs camera
+            access to scan ticket QR
+            codes.
           </Text>
 
           <Pressable
-            style={styles.primaryButton}
-            onPress={requestPermission}
+            style={
+              styles.primaryButton
+            }
+            onPress={
+              requestPermission
+            }
           >
-            <Text style={styles.primaryButtonText}>
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
               Allow camera access
             </Text>
           </Pressable>
 
           {!permission.canAskAgain ? (
-            <Text style={styles.hint}>
-              Camera access is blocked. Enable it
-              manually in your device settings.
+            <Text
+              style={styles.hint}
+            >
+              Camera access is
+              blocked. Enable it
+              manually in your device
+              settings.
             </Text>
           ) : null}
         </View>
@@ -227,10 +555,13 @@ export default function ScannerScreen() {
     );
   }
 
+
   return (
     <View style={styles.container}>
       <CameraView
-        style={StyleSheet.absoluteFill}
+        style={
+          StyleSheet.absoluteFill
+        }
         facing="back"
         barcodeScannerSettings={{
           barcodeTypes: ["qr"],
@@ -242,70 +573,209 @@ export default function ScannerScreen() {
         }
       />
 
-      <SafeAreaView style={styles.overlay}>
+
+      <SafeAreaView
+        style={styles.overlay}
+      >
         <View style={styles.topBar}>
-          <View>
-            <Text style={styles.staffLabel}>
+          <View style={styles.staffInfo}>
+            <Text
+              style={styles.staffLabel}
+            >
               SIGNED IN AS
             </Text>
 
-            <Text style={styles.staffName}>
+            <Text
+              style={styles.staffName}
+            >
               {session?.user.name ??
                 session?.user.email}
             </Text>
 
-            <Text style={styles.connectionText}>
-              {isOnline ? "Online" : "Offline"}
+            <Text
+              style={
+                isOnline
+                  ? styles.onlineText
+                  : styles.offlineText
+              }
+            >
+              {isOnline
+                ? "● Online"
+                : "● Offline"}
+            </Text>
+
+            <Text
+              style={
+                styles.queueText
+              }
+            >
+              Offline queue:{" "}
+              {offlineQueueCount}
             </Text>
           </View>
 
+
           <Pressable
-            style={styles.logoutButton}
-            onPress={() => void signOut()}
+            style={
+              styles.logoutButton
+            }
+            onPress={() =>
+              void signOut()
+            }
           >
-            <Text style={styles.logoutText}>
+            <Text
+              style={
+                styles.logoutText
+              }
+            >
               Log out
             </Text>
           </Pressable>
         </View>
 
-        <View style={styles.scanArea}>
-          <View style={styles.frame} />
 
-          <Text style={styles.instruction}>
-            Align the ticket QR code inside the frame
+        <View
+          style={
+            styles.manifestPanel
+          }
+        >
+          <Text
+            style={
+              styles.manifestStatus
+            }
+          >
+            Offline manifest:{" "}
+            {isManifestAvailable
+              ? "Available"
+              : "Not downloaded"}
+          </Text>
+
+          <Pressable
+            style={
+              styles.smallButton
+            }
+            disabled={
+              isDownloadingManifest ||
+              !isOnline
+            }
+            onPress={() =>
+              void downloadManifest()
+            }
+          >
+            <Text
+              style={
+                styles.smallButtonText
+              }
+            >
+              {isDownloadingManifest
+                ? "Downloading..."
+                : "Download Offline Manifest"}
+            </Text>
+          </Pressable>
+
+
+          {offlineQueueCount > 0 &&
+          isOnline ? (
+            <Pressable
+              style={
+                styles.smallButton
+              }
+              disabled={isSyncing}
+              onPress={() =>
+                void syncQueuedScans()
+              }
+            >
+              <Text
+                style={
+                  styles.smallButtonText
+                }
+              >
+                {isSyncing
+                  ? "Synchronizing..."
+                  : "Sync Offline Scans"}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+
+        <View
+          style={styles.scanArea}
+        >
+          <View
+            style={styles.frame}
+          />
+
+          <Text
+            style={
+              styles.instruction
+            }
+          >
+            Align the ticket QR code
+            inside the frame
           </Text>
         </View>
 
+
         {scannedValue ? (
-          <View style={styles.resultCard}>
-            <Text style={styles.resultLabel}>
+          <View
+            style={
+              styles.resultCard
+            }
+          >
+            <Text
+              style={
+                styles.resultLabel
+              }
+            >
               {getStatusTitle()}
             </Text>
 
             <Text
               numberOfLines={3}
-              style={styles.resultValue}
+              style={
+                styles.resultValue
+              }
             >
               {scannedValue}
             </Text>
 
-            <Text style={styles.resultNote}>
+            <Text
+              style={
+                styles.resultNote
+              }
+            >
               {statusMessage}
             </Text>
 
             <Pressable
-              style={styles.primaryButton}
-              onPress={resetScanner}
+              style={
+                styles.primaryButton
+              }
+              onPress={
+                resetScanner
+              }
             >
-              <Text style={styles.primaryButtonText}>
+              <Text
+                style={
+                  styles.primaryButtonText
+                }
+              >
                 Scan another ticket
               </Text>
             </Pressable>
           </View>
         ) : (
-          <View style={styles.readyPill}>
-            <Text style={styles.readyText}>
+          <View
+            style={
+              styles.readyPill
+            }
+          >
+            <Text
+              style={
+                styles.readyText
+              }
+            >
               Ready to scan
             </Text>
           </View>
@@ -315,176 +785,234 @@ export default function ScannerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000000",
-  },
 
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#030712",
-    padding: 24,
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: "#000000",
+    },
 
-  permissionContainer: {
-    flex: 1,
-    justifyContent: "center",
-    padding: 24,
-    backgroundColor: "#030712",
-  },
+    centered: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#030712",
+      padding: 24,
+    },
 
-  permissionCard: {
-    padding: 24,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    backgroundColor: "#111827",
-  },
+    permissionContainer: {
+      flex: 1,
+      justifyContent: "center",
+      padding: 24,
+      backgroundColor: "#030712",
+    },
 
-  permissionTitle: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "800",
-    marginBottom: 10,
-  },
+    permissionCard: {
+      padding: 24,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: "#1f2937",
+      backgroundColor: "#111827",
+    },
 
-  infoText: {
-    color: "#d1d5db",
-    fontSize: 16,
-    lineHeight: 23,
-    textAlign: "center",
-  },
+    permissionTitle: {
+      color: "#ffffff",
+      fontSize: 24,
+      fontWeight: "800",
+      marginBottom: 10,
+    },
 
-  hint: {
-    color: "#9ca3af",
-    marginTop: 14,
-  },
+    infoText: {
+      color: "#d1d5db",
+      fontSize: 16,
+      lineHeight: 23,
+      textAlign: "center",
+    },
 
-  overlay: {
-    flex: 1,
-    justifyContent: "space-between",
-    padding: 20,
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
+    hint: {
+      color: "#9ca3af",
+      marginTop: 14,
+    },
 
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: "rgba(3,7,18,0.78)",
-  },
+    overlay: {
+      flex: 1,
+      justifyContent:
+        "space-between",
+      padding: 20,
+      backgroundColor:
+        "rgba(0,0,0,0.18)",
+    },
 
-  staffLabel: {
-    color: "#93c5fd",
-    fontSize: 11,
-    fontWeight: "800",
-  },
+    topBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+      padding: 14,
+      borderRadius: 16,
+      backgroundColor:
+        "rgba(3,7,18,0.82)",
+    },
 
-  staffName: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "700",
-    marginTop: 3,
-  },
+    staffInfo: {
+      flex: 1,
+      paddingRight: 10,
+    },
 
-  connectionText: {
-    color: "#d1d5db",
-    marginTop: 4,
-    fontSize: 12,
-  },
+    staffLabel: {
+      color: "#93c5fd",
+      fontSize: 11,
+      fontWeight: "800",
+    },
 
-  logoutButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#4b5563",
-  },
+    staffName: {
+      color: "#ffffff",
+      fontSize: 15,
+      fontWeight: "700",
+      marginTop: 3,
+    },
 
-  logoutText: {
-    color: "#ffffff",
-    fontWeight: "700",
-  },
+    onlineText: {
+      color: "#86efac",
+      marginTop: 5,
+      fontSize: 12,
+      fontWeight: "700",
+    },
 
-  scanArea: {
-    alignItems: "center",
-  },
+    offlineText: {
+      color: "#fca5a5",
+      marginTop: 5,
+      fontSize: 12,
+      fontWeight: "700",
+    },
 
-  frame: {
-    width: 260,
-    height: 260,
-    borderWidth: 4,
-    borderColor: "#ffffff",
-    borderRadius: 20,
-  },
+    queueText: {
+      color: "#d1d5db",
+      marginTop: 3,
+      fontSize: 12,
+    },
 
-  instruction: {
-    color: "#ffffff",
-    fontWeight: "700",
-    marginTop: 18,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: "rgba(3,7,18,0.72)",
-  },
+    logoutButton: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: "#4b5563",
+    },
 
-  readyPill: {
-    alignSelf: "center",
-    borderRadius: 999,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-    backgroundColor: "rgba(6,78,59,0.88)",
-  },
+    logoutText: {
+      color: "#ffffff",
+      fontWeight: "700",
+    },
 
-  readyText: {
-    color: "#d1fae5",
-    fontWeight: "800",
-  },
+    manifestPanel: {
+      backgroundColor:
+        "rgba(3,7,18,0.88)",
+      borderRadius: 14,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: "#374151",
+    },
 
-  resultCard: {
-    borderRadius: 18,
-    padding: 18,
-    backgroundColor: "rgba(3,7,18,0.94)",
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
+    manifestStatus: {
+      color: "#ffffff",
+      fontWeight: "700",
+      marginBottom: 8,
+    },
 
-  resultLabel: {
-    color: "#86efac",
-    fontWeight: "800",
-    fontSize: 18,
-  },
+    smallButton: {
+      backgroundColor: "#1d4ed8",
+      minHeight: 40,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      marginTop: 6,
+    },
 
-  resultValue: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 8,
-  },
+    smallButtonText: {
+      color: "#ffffff",
+      fontWeight: "700",
+    },
 
-  resultNote: {
-    color: "#9ca3af",
-    marginTop: 8,
-    marginBottom: 14,
-  },
+    scanArea: {
+      alignItems: "center",
+    },
 
-  primaryButton: {
-    minHeight: 50,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 12,
-    backgroundColor: "#2563eb",
-    marginTop: 18,
-  },
+    frame: {
+      width: 260,
+      height: 260,
+      borderWidth: 4,
+      borderColor: "#ffffff",
+      borderRadius: 20,
+    },
 
-  primaryButtonText: {
-    color: "#ffffff",
-    fontWeight: "800",
-    fontSize: 16,
-  },
-});
+    instruction: {
+      color: "#ffffff",
+      fontWeight: "700",
+      marginTop: 18,
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: 999,
+      backgroundColor:
+        "rgba(3,7,18,0.72)",
+    },
+
+    readyPill: {
+      alignSelf: "center",
+      borderRadius: 999,
+      paddingVertical: 11,
+      paddingHorizontal: 18,
+      backgroundColor:
+        "rgba(6,78,59,0.88)",
+    },
+
+    readyText: {
+      color: "#d1fae5",
+      fontWeight: "800",
+    },
+
+    resultCard: {
+      borderRadius: 18,
+      padding: 18,
+      backgroundColor:
+        "rgba(3,7,18,0.94)",
+      borderWidth: 1,
+      borderColor: "#374151",
+    },
+
+    resultLabel: {
+      color: "#86efac",
+      fontWeight: "800",
+      fontSize: 18,
+    },
+
+    resultValue: {
+      color: "#ffffff",
+      fontSize: 16,
+      fontWeight: "700",
+      marginTop: 8,
+    },
+
+    resultNote: {
+      color: "#d1d5db",
+      marginTop: 8,
+      marginBottom: 14,
+    },
+
+    primaryButton: {
+      minHeight: 50,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 12,
+      backgroundColor: "#2563eb",
+      marginTop: 18,
+    },
+
+    primaryButtonText: {
+      color: "#ffffff",
+      fontWeight: "800",
+      fontSize: 16,
+    },
+  });
