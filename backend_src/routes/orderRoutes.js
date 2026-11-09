@@ -8,5 +8,6 @@ router.use(authenticate);
 router.post('/', authorize(ROLES.ATTENDEE), orderController.createOrder);
 router.get('/', authorize(ROLES.ATTENDEE), orderController.getMyOrders);
 router.get('/:id', authorize(ROLES.ATTENDEE), orderController.getOrderById);
+router.post('/:id/refund', authorize(ROLES.ORGANIZER), orderController.refundOrder);
 
 module.exports = router;

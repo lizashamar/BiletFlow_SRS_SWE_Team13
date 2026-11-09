@@ -1,5 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../db');
 const { HttpError, handleError } = require('../utils/httpError');
 
 const ticketInclude = {
