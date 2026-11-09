@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { getJwtSecret } = require('../config');
 
 const ROLES = Object.freeze({
   ATTENDEE: 'ATTENDEE',
@@ -18,7 +19,7 @@ function authenticate(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'supersecretkey');
+    const payload = jwt.verify(token, getJwtSecret());
     req.user = { id: payload.id, email: payload.email, role: payload.role };
     return next();
   } catch (err) {
@@ -41,4 +42,10 @@ function authorize(...allowedRoles) {
   };
 }
 
-module.exports = { authenticate, authorize, ROLES };
+// 3) Необязательная аутентификация: без заголовка запрос анонимный, с заголовком токен обязан быть валидным.
+function optionalAuth(req, res, next) {
+  if (!req.headers.authorization) return next();
+  return authenticate(req, res, next);
+}
+
+module.exports = { authenticate, optionalAuth, authorize, ROLES };
