@@ -19,8 +19,25 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 
 import {
-  verifyAndCheckInTicket,
+  getOfflineManifest,
+  syncOfflineScans,
+  verifyTicketOnline,
 } from "../services/checkIn";
+
+import {
+  verifyTicketOffline,
+} from "../services/offlineVerification";
+
+import {
+  getManifest,
+  saveManifest,
+} from "../storage/manifestStorage";
+
+import {
+  addOfflineScan,
+  clearOfflineQueue,
+  getOfflineQueue,
+} from "../storage/offlineScanQueue";
 
 import {
   cacheScan,
@@ -28,15 +45,20 @@ import {
 } from "../storage/scanCache";
 
 import type {
-  CheckInStatus,
+  VerifyStatus,
 } from "../types/checkIn";
 
 type ScanUiStatus =
-  | CheckInStatus
+  | VerifyStatus
   | "DUPLICATE"
   | "OFFLINE"
+  | "SYNCED"
   | "ERROR"
   | null;
+
+// Временно используем event 1.
+// Позже можно заменить на экран выбора мероприятия.
+const EVENT_ID = 1;
 
 export default function ScannerScreen() {
   const { session, signOut } = useAuth();
@@ -56,17 +78,179 @@ export default function ScannerScreen() {
   const [isOnline, setIsOnline] =
     useState(true);
 
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(
-      (state) => {
-        setIsOnline(
-          state.isConnected === true
-        );
-      }
+  const [
+    isManifestAvailable,
+    setIsManifestAvailable,
+  ] = useState(false);
+
+  const [
+    isDownloadingManifest,
+    setIsDownloadingManifest,
+  ] = useState(false);
+
+  const [isSyncing, setIsSyncing] =
+    useState(false);
+
+  const [
+    offlineQueueCount,
+    setOfflineQueueCount,
+  ] = useState(0);
+
+  async function refreshOfflineQueueCount() {
+    const queue =
+      await getOfflineQueue();
+
+    setOfflineQueueCount(
+      queue.length
     );
+  }
+
+  async function checkStoredManifest() {
+    const manifest =
+      await getManifest(
+        EVENT_ID
+      );
+
+    setIsManifestAvailable(
+      Boolean(manifest)
+    );
+  }
+
+  async function downloadManifest() {
+    if (!session?.token) {
+      setScanStatus("ERROR");
+
+      setStatusMessage(
+        "Authentication session is missing."
+      );
+
+      return;
+    }
+
+    if (!isOnline) {
+      setScanStatus("OFFLINE");
+
+      setStatusMessage(
+        "Connect to the internet before downloading the offline manifest."
+      );
+
+      return;
+    }
+
+    setIsDownloadingManifest(true);
+
+    try {
+      const manifest =
+        await getOfflineManifest(
+          EVENT_ID,
+          session.token
+        );
+
+      await saveManifest(
+        manifest
+      );
+
+      setIsManifestAvailable(true);
+
+      setScanStatus("SYNCED");
+
+      setStatusMessage(
+        `Offline manifest downloaded successfully for event ${EVENT_ID}.`
+      );
+    } catch (error) {
+      setScanStatus("ERROR");
+
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to download offline manifest."
+      );
+    } finally {
+      setIsDownloadingManifest(false);
+    }
+  }
+
+  async function syncQueuedScans() {
+    if (!session?.token) {
+      return;
+    }
+
+    if (!isOnline) {
+      return;
+    }
+
+    if (isSyncing) {
+      return;
+    }
+
+    setIsSyncing(true);
+
+    try {
+      const queue =
+        await getOfflineQueue();
+
+      if (queue.length === 0) {
+        setOfflineQueueCount(0);
+        return;
+      }
+
+      const batch =
+        queue.slice(0, 200);
+
+      await syncOfflineScans(
+        batch,
+        session.token
+      );
+
+      await clearOfflineQueue();
+
+      setOfflineQueueCount(0);
+
+      setScanStatus("SYNCED");
+
+      setStatusMessage(
+        `${batch.length} offline scan(s) synchronized successfully.`
+      );
+    } catch (error) {
+      console.log(
+        "Offline sync failed:",
+        error
+      );
+
+      setScanStatus("ERROR");
+
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "Offline scans are still queued and will be synchronized later."
+      );
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  useEffect(() => {
+    void checkStoredManifest();
+    void refreshOfflineQueueCount();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe =
+      NetInfo.addEventListener(
+        (state) => {
+          const online =
+            state.isConnected === true;
+
+          setIsOnline(online);
+
+          if (online) {
+            void syncQueuedScans();
+          }
+        }
+      );
 
     return unsubscribe;
-  }, []);
+  }, [session?.token]);
 
   async function handleBarcodeScanned(
     result: BarcodeScanningResult
@@ -75,74 +259,157 @@ export default function ScannerScreen() {
       return;
     }
 
-    const qrToken = result.data;
+    const qrToken =
+      result.data;
 
     setScannedValue(qrToken);
+
     setScanStatus(null);
-    setStatusMessage("");
+
+    setStatusMessage(
+      "Processing ticket..."
+    );
 
     try {
       const duplicate =
-        await wasRecentlyScanned(qrToken);
+        await wasRecentlyScanned(
+          qrToken
+        );
 
       if (duplicate) {
-        setScanStatus("DUPLICATE");
+        setScanStatus(
+          "DUPLICATE"
+        );
 
         setStatusMessage(
-          "This ticket was recently scanned on this device."
+          "This ticket was already scanned recently on this device."
         );
 
         return;
       }
 
-      if (!isOnline) {
+      if (isOnline) {
+        if (!session?.token) {
+          setScanStatus(
+            "ERROR"
+          );
+
+          setStatusMessage(
+            "Authentication session is missing."
+          );
+
+          return;
+        }
+
+        const response =
+          await verifyTicketOnline(
+            qrToken,
+            EVENT_ID,
+            session.token
+          );
+
         await cacheScan(
           qrToken,
+          response.status
+        );
+
+        setScanStatus(
+          response.status
+        );
+
+        setStatusMessage(
+          response.message ??
+            getDefaultStatusMessage(
+              response.status
+            )
+        );
+
+        return;
+      }
+
+      const manifest =
+        await getManifest(
+          EVENT_ID
+        );
+
+      if (!manifest) {
+        setScanStatus(
           "OFFLINE"
         );
 
-        setScanStatus("OFFLINE");
-
         setStatusMessage(
-          "No network connection. Ticket could not be verified with the server."
+          "No offline manifest is available. Connect to the internet and download the manifest first."
         );
 
         return;
       }
 
-      if (!session?.token) {
-        setScanStatus("ERROR");
-
-        setStatusMessage(
-          "Authentication session is missing."
-        );
-
-        return;
-      }
-
-      const response =
-        await verifyAndCheckInTicket(
+      const offlineResult =
+        await verifyTicketOffline(
           qrToken,
-          session.token
+          manifest
         );
+
+      if (
+        offlineResult ===
+        "INVALID"
+      ) {
+        setScanStatus(
+          "INVALID"
+        );
+
+        setStatusMessage(
+          "Ticket was not found in the offline manifest."
+        );
+
+        return;
+      }
+
+      if (
+        offlineResult ===
+        "ALREADY_CHECKED_IN"
+      ) {
+        setScanStatus(
+          "ALREADY_CHECKED_IN"
+        );
+
+        setStatusMessage(
+          "This ticket was already checked in before the manifest was downloaded."
+        );
+
+        return;
+      }
+
+      await addOfflineScan({
+        qrToken,
+        eventId: EVENT_ID,
+        scannedAt:
+          new Date().toISOString(),
+      });
 
       await cacheScan(
         qrToken,
-        response.status
+        "OFFLINE"
       );
 
-      setScanStatus(response.status);
+      await refreshOfflineQueueCount();
+
+      setScanStatus(
+        "OFFLINE"
+      );
 
       setStatusMessage(
-        response.message
+        "Ticket accepted offline and added to the synchronization queue."
       );
     } catch (error) {
-      setScanStatus("ERROR");
+      setScanStatus(
+        "ERROR"
+      );
 
       setStatusMessage(
         error instanceof Error
           ? error.message
-          : "Unable to verify ticket."
+          : "Unable to process ticket."
       );
     }
   }
@@ -153,19 +420,58 @@ export default function ScannerScreen() {
     setStatusMessage("");
   }
 
+  function getDefaultStatusMessage(
+    status: VerifyStatus
+  ) {
+    switch (status) {
+      case "CHECKED_IN":
+        return "Ticket checked in successfully.";
+
+      case "VALID":
+        return "Ticket is valid.";
+
+      case "ALREADY_CHECKED_IN":
+        return "Ticket has already been checked in.";
+
+      case "REJECTED":
+        return "Ticket was rejected.";
+
+      case "INVALID":
+        return "Ticket is invalid.";
+
+      case "WRONG_EVENT":
+        return "Ticket belongs to a different event.";
+
+      case "TEMPORARY_ERROR":
+        return "Temporary verification error.";
+
+      default:
+        return "Ticket processed.";
+    }
+  }
+
   function getStatusTitle() {
     switch (scanStatus) {
+      case "CHECKED_IN":
+        return "Checked in";
+
       case "VALID":
         return "Valid ticket";
 
       case "ALREADY_CHECKED_IN":
         return "Already checked in";
 
+      case "REJECTED":
+        return "Rejected ticket";
+
       case "INVALID":
         return "Invalid ticket";
 
-      case "CANCELLED":
-        return "Cancelled ticket";
+      case "WRONG_EVENT":
+        return "Wrong event";
+
+      case "TEMPORARY_ERROR":
+        return "Temporary error";
 
       case "DUPLICATE":
         return "Duplicate scan";
@@ -173,8 +479,11 @@ export default function ScannerScreen() {
       case "OFFLINE":
         return "Offline";
 
+      case "SYNCED":
+        return "Synchronization complete";
+
       case "ERROR":
-        return "Verification error";
+        return "Error";
 
       default:
         return "QR scanned";
@@ -244,7 +553,7 @@ export default function ScannerScreen() {
 
       <SafeAreaView style={styles.overlay}>
         <View style={styles.topBar}>
-          <View>
+          <View style={styles.staffInfo}>
             <Text style={styles.staffLabel}>
               SIGNED IN AS
             </Text>
@@ -254,8 +563,20 @@ export default function ScannerScreen() {
                 session?.user.email}
             </Text>
 
-            <Text style={styles.connectionText}>
-              {isOnline ? "Online" : "Offline"}
+            <Text
+              style={
+                isOnline
+                  ? styles.onlineText
+                  : styles.offlineText
+              }
+            >
+              {isOnline
+                ? "● Online"
+                : "● Offline"}
+            </Text>
+
+            <Text style={styles.queueText}>
+              Offline queue: {offlineQueueCount}
             </Text>
           </View>
 
@@ -267,6 +588,49 @@ export default function ScannerScreen() {
               Log out
             </Text>
           </Pressable>
+        </View>
+
+        <View style={styles.manifestPanel}>
+          <Text style={styles.manifestStatus}>
+            Offline manifest:{" "}
+            {isManifestAvailable
+              ? "Available"
+              : "Not downloaded"}
+          </Text>
+
+          <Pressable
+            style={styles.smallButton}
+            disabled={
+              isDownloadingManifest ||
+              !isOnline
+            }
+            onPress={() =>
+              void downloadManifest()
+            }
+          >
+            <Text style={styles.smallButtonText}>
+              {isDownloadingManifest
+                ? "Downloading..."
+                : "Download Offline Manifest"}
+            </Text>
+          </Pressable>
+
+          {offlineQueueCount > 0 &&
+          isOnline ? (
+            <Pressable
+              style={styles.smallButton}
+              disabled={isSyncing}
+              onPress={() =>
+                void syncQueuedScans()
+              }
+            >
+              <Text style={styles.smallButtonText}>
+                {isSyncing
+                  ? "Synchronizing..."
+                  : "Sync Offline Scans"}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.scanArea}>
@@ -376,7 +740,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 14,
     borderRadius: 16,
-    backgroundColor: "rgba(3,7,18,0.78)",
+    backgroundColor: "rgba(3,7,18,0.82)",
+  },
+
+  staffInfo: {
+    flex: 1,
+    paddingRight: 10,
   },
 
   staffLabel: {
@@ -392,9 +761,23 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  connectionText: {
+  onlineText: {
+    color: "#86efac",
+    marginTop: 5,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  offlineText: {
+    color: "#fca5a5",
+    marginTop: 5,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  queueText: {
     color: "#d1d5db",
-    marginTop: 4,
+    marginTop: 3,
     fontSize: 12,
   },
 
@@ -407,6 +790,35 @@ const styles = StyleSheet.create({
   },
 
   logoutText: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+
+  manifestPanel: {
+    backgroundColor: "rgba(3,7,18,0.88)",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
+
+  manifestStatus: {
+    color: "#ffffff",
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+
+  smallButton: {
+    backgroundColor: "#1d4ed8",
+    minHeight: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginTop: 6,
+  },
+
+  smallButtonText: {
     color: "#ffffff",
     fontWeight: "700",
   },
@@ -468,7 +880,7 @@ const styles = StyleSheet.create({
   },
 
   resultNote: {
-    color: "#9ca3af",
+    color: "#d1d5db",
     marginTop: 8,
     marginBottom: 14,
   },
