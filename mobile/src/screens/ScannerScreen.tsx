@@ -14,7 +14,6 @@ import {
 } from "expo-camera";
 
 import NetInfo from "@react-native-community/netinfo";
-
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../context/AuthContext";
@@ -41,13 +40,13 @@ import {
 } from "../storage/offlineScanQueue";
 
 import {
+  cacheScan,
   wasRecentlyScanned,
 } from "../storage/scanCache";
 
 import type {
   VerifyStatus,
 } from "../types/checkIn";
-
 
 type ScanUiStatus =
   | VerifyStatus
@@ -57,9 +56,7 @@ type ScanUiStatus =
   | "ERROR"
   | null;
 
-
 const EVENT_ID = 1;
-
 
 export default function ScannerScreen() {
   const { session, signOut } = useAuth();
@@ -79,32 +76,43 @@ export default function ScannerScreen() {
   const [isOnline, setIsOnline] =
     useState(true);
 
-  const [isManifestAvailable, setIsManifestAvailable] =
-    useState(false);
+  const [
+    isManifestAvailable,
+    setIsManifestAvailable,
+  ] = useState(false);
 
-  const [isDownloadingManifest, setIsDownloadingManifest] =
-    useState(false);
+  const [
+    isDownloadingManifest,
+    setIsDownloadingManifest,
+  ] = useState(false);
 
   const [isSyncing, setIsSyncing] =
     useState(false);
 
-  const [offlineQueueCount, setOfflineQueueCount] =
-    useState(0);
-
+  const [
+    offlineQueueCount,
+    setOfflineQueueCount,
+  ] = useState(0);
 
   async function refreshOfflineQueueCount() {
-    const queue = await getOfflineQueue();
+    const queue =
+      await getOfflineQueue();
 
-    setOfflineQueueCount(queue.length);
+    setOfflineQueueCount(
+      queue.length
+    );
   }
-
 
   async function checkStoredManifest() {
-    const manifest = await getManifest(EVENT_ID);
+    const manifest =
+      await getManifest(
+        EVENT_ID
+      );
 
-    setIsManifestAvailable(Boolean(manifest));
+    setIsManifestAvailable(
+      Boolean(manifest)
+    );
   }
-
 
   async function downloadManifest() {
     if (!session?.token) {
@@ -127,7 +135,9 @@ export default function ScannerScreen() {
       return;
     }
 
-    setIsDownloadingManifest(true);
+    setIsDownloadingManifest(
+      true
+    );
 
     try {
       const manifest =
@@ -136,17 +146,25 @@ export default function ScannerScreen() {
           session.token
         );
 
-      await saveManifest(manifest);
+      await saveManifest(
+        manifest
+      );
 
-      setIsManifestAvailable(true);
+      setIsManifestAvailable(
+        true
+      );
 
-      setScanStatus("SYNCED");
+      setScanStatus(
+        "SYNCED"
+      );
 
       setStatusMessage(
         `Offline manifest downloaded successfully for event ${EVENT_ID}.`
       );
     } catch (error) {
-      setScanStatus("ERROR");
+      setScanStatus(
+        "ERROR"
+      );
 
       setStatusMessage(
         error instanceof Error
@@ -154,10 +172,11 @@ export default function ScannerScreen() {
           : "Unable to download offline manifest."
       );
     } finally {
-      setIsDownloadingManifest(false);
+      setIsDownloadingManifest(
+        false
+      );
     }
   }
-
 
   async function syncQueuedScans() {
     if (!session?.token) {
@@ -178,14 +197,21 @@ export default function ScannerScreen() {
       const queue =
         await getOfflineQueue();
 
-      if (queue.length === 0) {
-        setOfflineQueueCount(0);
+      if (
+        queue.length === 0
+      ) {
+        setOfflineQueueCount(
+          0
+        );
 
         return;
       }
 
       const batch =
-        queue.slice(0, 200);
+        queue.slice(
+          0,
+          200
+        );
 
       await syncOfflineScans(
         batch,
@@ -194,9 +220,13 @@ export default function ScannerScreen() {
 
       await clearOfflineQueue();
 
-      setOfflineQueueCount(0);
+      setOfflineQueueCount(
+        0
+      );
 
-      setScanStatus("SYNCED");
+      setScanStatus(
+        "SYNCED"
+      );
 
       setStatusMessage(
         `${batch.length} offline scan(s) synchronized successfully.`
@@ -211,16 +241,16 @@ export default function ScannerScreen() {
         "Offline scans are still queued and will be synchronized later."
       );
     } finally {
-      setIsSyncing(false);
+      setIsSyncing(
+        false
+      );
     }
   }
-
 
   useEffect(() => {
     void checkStoredManifest();
     void refreshOfflineQueueCount();
   }, []);
-
 
   useEffect(() => {
     const unsubscribe =
@@ -229,7 +259,9 @@ export default function ScannerScreen() {
           const online =
             state.isConnected === true;
 
-          setIsOnline(online);
+          setIsOnline(
+            online
+          );
 
           if (online) {
             void syncQueuedScans();
@@ -240,7 +272,6 @@ export default function ScannerScreen() {
     return unsubscribe;
   }, [session?.token]);
 
-
   async function handleBarcodeScanned(
     result: BarcodeScanningResult
   ) {
@@ -248,11 +279,16 @@ export default function ScannerScreen() {
       return;
     }
 
-    const qrToken = result.data;
+    const qrToken =
+      result.data;
 
-    setScannedValue(qrToken);
+    setScannedValue(
+      qrToken
+    );
 
-    setScanStatus(null);
+    setScanStatus(
+      null
+    );
 
     setStatusMessage(
       "Processing ticket..."
@@ -276,7 +312,6 @@ export default function ScannerScreen() {
         return;
       }
 
-
       if (isOnline) {
         if (!session?.token) {
           setScanStatus(
@@ -297,6 +332,11 @@ export default function ScannerScreen() {
             session.token
           );
 
+        await cacheScan(
+          qrToken,
+          response.status
+        );
+
         setScanStatus(
           response.status
         );
@@ -310,7 +350,6 @@ export default function ScannerScreen() {
 
         return;
       }
-
 
       const manifest =
         await getManifest(
@@ -329,13 +368,11 @@ export default function ScannerScreen() {
         return;
       }
 
-
       const offlineResult =
         await verifyTicketOffline(
           qrToken,
           manifest
         );
-
 
       if (
         offlineResult ===
@@ -352,7 +389,6 @@ export default function ScannerScreen() {
         return;
       }
 
-
       if (
         offlineResult ===
         "ALREADY_CHECKED_IN"
@@ -368,7 +404,6 @@ export default function ScannerScreen() {
         return;
       }
 
-
       await addOfflineScan({
         qrToken,
         eventId: EVENT_ID,
@@ -376,9 +411,12 @@ export default function ScannerScreen() {
           new Date().toISOString(),
       });
 
+      await cacheScan(
+        qrToken,
+        "OFFLINE"
+      );
 
       await refreshOfflineQueueCount();
-
 
       setScanStatus(
         "OFFLINE"
@@ -387,7 +425,6 @@ export default function ScannerScreen() {
       setStatusMessage(
         "Ticket accepted offline and added to the synchronization queue."
       );
-
     } catch (error) {
       setScanStatus(
         "ERROR"
@@ -401,15 +438,19 @@ export default function ScannerScreen() {
     }
   }
 
-
   function resetScanner() {
-    setScannedValue(null);
+    setScannedValue(
+      null
+    );
 
-    setScanStatus(null);
+    setScanStatus(
+      null
+    );
 
-    setStatusMessage("");
+    setStatusMessage(
+      ""
+    );
   }
-
 
   function getDefaultStatusMessage(
     status: VerifyStatus
@@ -440,7 +481,6 @@ export default function ScannerScreen() {
         return "Ticket processed.";
     }
   }
-
 
   function getStatusTitle() {
     switch (scanStatus) {
@@ -482,17 +522,23 @@ export default function ScannerScreen() {
     }
   }
 
-
   if (!permission) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.infoText}>
+      <View
+        style={
+          styles.centered
+        }
+      >
+        <Text
+          style={
+            styles.infoText
+          }
+        >
           Checking camera permission...
         </Text>
       </View>
     );
   }
-
 
   if (!permission.granted) {
     return (
@@ -516,11 +562,11 @@ export default function ScannerScreen() {
           </Text>
 
           <Text
-            style={styles.infoText}
+            style={
+              styles.infoText
+            }
           >
-            BiletFlow needs camera
-            access to scan ticket QR
-            codes.
+            BiletFlow needs camera access to scan ticket QR codes.
           </Text>
 
           <Pressable
@@ -542,12 +588,11 @@ export default function ScannerScreen() {
 
           {!permission.canAskAgain ? (
             <Text
-              style={styles.hint}
+              style={
+                styles.hint
+              }
             >
-              Camera access is
-              blocked. Enable it
-              manually in your device
-              settings.
+              Camera access is blocked. Enable it manually in your device settings.
             </Text>
           ) : null}
         </View>
@@ -555,9 +600,12 @@ export default function ScannerScreen() {
     );
   }
 
-
   return (
-    <View style={styles.container}>
+    <View
+      style={
+        styles.container
+      }
+    >
       <CameraView
         style={
           StyleSheet.absoluteFill
@@ -573,20 +621,33 @@ export default function ScannerScreen() {
         }
       />
 
-
       <SafeAreaView
-        style={styles.overlay}
+        style={
+          styles.overlay
+        }
       >
-        <View style={styles.topBar}>
-          <View style={styles.staffInfo}>
+        <View
+          style={
+            styles.topBar
+          }
+        >
+          <View
+            style={
+              styles.staffInfo
+            }
+          >
             <Text
-              style={styles.staffLabel}
+              style={
+                styles.staffLabel
+              }
             >
               SIGNED IN AS
             </Text>
 
             <Text
-              style={styles.staffName}
+              style={
+                styles.staffName
+              }
             >
               {session?.user.name ??
                 session?.user.email}
@@ -614,7 +675,6 @@ export default function ScannerScreen() {
             </Text>
           </View>
 
-
           <Pressable
             style={
               styles.logoutButton
@@ -632,7 +692,6 @@ export default function ScannerScreen() {
             </Text>
           </Pressable>
         </View>
-
 
         <View
           style={
@@ -673,14 +732,16 @@ export default function ScannerScreen() {
             </Text>
           </Pressable>
 
-
-          {offlineQueueCount > 0 &&
+          {offlineQueueCount >
+            0 &&
           isOnline ? (
             <Pressable
               style={
                 styles.smallButton
               }
-              disabled={isSyncing}
+              disabled={
+                isSyncing
+              }
               onPress={() =>
                 void syncQueuedScans()
               }
@@ -698,12 +759,15 @@ export default function ScannerScreen() {
           ) : null}
         </View>
 
-
         <View
-          style={styles.scanArea}
+          style={
+            styles.scanArea
+          }
         >
           <View
-            style={styles.frame}
+            style={
+              styles.frame
+            }
           />
 
           <Text
@@ -711,11 +775,9 @@ export default function ScannerScreen() {
               styles.instruction
             }
           >
-            Align the ticket QR code
-            inside the frame
+            Align the ticket QR code inside the frame
           </Text>
         </View>
-
 
         {scannedValue ? (
           <View
@@ -784,7 +846,6 @@ export default function ScannerScreen() {
     </View>
   );
 }
-
 
 const styles =
   StyleSheet.create({
