@@ -415,9 +415,47 @@ export default function ScannerScreen() {
   }
 
   function resetScanner() {
-    setScannedValue(null);
-    setScanStatus(null);
-    setStatusMessage("");
+    setScannedValue(
+      null
+    );
+
+    setScanStatus(
+      null
+    );
+
+    setStatusMessage(
+      ""
+    );
+  }
+
+  function getDefaultStatusMessage(
+    status: VerifyStatus
+  ) {
+    switch (status) {
+      case "CHECKED_IN":
+        return "Ticket checked in successfully.";
+
+      case "VALID":
+        return "Ticket is valid.";
+
+      case "ALREADY_CHECKED_IN":
+        return "Ticket has already been checked in.";
+
+      case "REJECTED":
+        return "Ticket was rejected.";
+
+      case "INVALID":
+        return "Ticket is invalid.";
+
+      case "WRONG_EVENT":
+        return "Ticket belongs to a different event.";
+
+      case "TEMPORARY_ERROR":
+        return "Temporary verification error.";
+
+      default:
+        return "Ticket processed.";
+    }
   }
 
   function getDefaultStatusMessage(
@@ -492,8 +530,16 @@ export default function ScannerScreen() {
 
   if (!permission) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.infoText}>
+      <View
+        style={
+          styles.centered
+        }
+      >
+        <Text
+          style={
+            styles.infoText
+          }
+        >
           Checking camera permission...
         </Text>
       </View>
@@ -503,32 +549,56 @@ export default function ScannerScreen() {
   if (!permission.granted) {
     return (
       <SafeAreaView
-        style={styles.permissionContainer}
+        style={
+          styles.permissionContainer
+        }
         edges={["bottom"]}
       >
-        <View style={styles.permissionCard}>
-          <Text style={styles.permissionTitle}>
+        <View
+          style={
+            styles.permissionCard
+          }
+        >
+          <Text
+            style={
+              styles.permissionTitle
+            }
+          >
             Camera access required
           </Text>
 
-          <Text style={styles.infoText}>
-            BiletFlow needs camera access to scan
-            ticket QR codes.
+          <Text
+            style={
+              styles.infoText
+            }
+          >
+            BiletFlow needs camera access to scan ticket QR codes.
           </Text>
 
           <Pressable
-            style={styles.primaryButton}
-            onPress={requestPermission}
+            style={
+              styles.primaryButton
+            }
+            onPress={
+              requestPermission
+            }
           >
-            <Text style={styles.primaryButtonText}>
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
               Allow camera access
             </Text>
           </Pressable>
 
           {!permission.canAskAgain ? (
-            <Text style={styles.hint}>
-              Camera access is blocked. Enable it
-              manually in your device settings.
+            <Text
+              style={
+                styles.hint
+              }
+            >
+              Camera access is blocked. Enable it manually in your device settings.
             </Text>
           ) : null}
         </View>
@@ -537,9 +607,15 @@ export default function ScannerScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View
+      style={
+        styles.container
+      }
+    >
       <CameraView
-        style={StyleSheet.absoluteFill}
+        style={
+          StyleSheet.absoluteFill
+        }
         facing="back"
         barcodeScannerSettings={{
           barcodeTypes: ["qr"],
@@ -558,7 +634,11 @@ export default function ScannerScreen() {
               SIGNED IN AS
             </Text>
 
-            <Text style={styles.staffName}>
+            <Text
+              style={
+                styles.staffName
+              }
+            >
               {session?.user.name ??
                 session?.user.email}
             </Text>
@@ -581,10 +661,18 @@ export default function ScannerScreen() {
           </View>
 
           <Pressable
-            style={styles.logoutButton}
-            onPress={() => void signOut()}
+            style={
+              styles.logoutButton
+            }
+            onPress={() =>
+              void signOut()
+            }
           >
-            <Text style={styles.logoutText}>
+            <Text
+              style={
+                styles.logoutText
+              }
+            >
               Log out
             </Text>
           </Pressable>
@@ -636,40 +724,112 @@ export default function ScannerScreen() {
         <View style={styles.scanArea}>
           <View style={styles.frame} />
 
-          <Text style={styles.instruction}>
+          {offlineQueueCount >
+            0 &&
+          isOnline ? (
+            <Pressable
+              style={
+                styles.smallButton
+              }
+              disabled={
+                isSyncing
+              }
+              onPress={() =>
+                void syncQueuedScans()
+              }
+            >
+              <Text
+                style={
+                  styles.smallButtonText
+                }
+              >
+                {isSyncing
+                  ? "Synchronizing..."
+                  : "Sync Offline Scans"}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View
+          style={
+            styles.scanArea
+          }
+        >
+          <View
+            style={
+              styles.frame
+            }
+          />
+
+          <Text
+            style={
+              styles.instruction
+            }
+          >
             Align the ticket QR code inside the frame
           </Text>
         </View>
 
         {scannedValue ? (
-          <View style={styles.resultCard}>
-            <Text style={styles.resultLabel}>
+          <View
+            style={
+              styles.resultCard
+            }
+          >
+            <Text
+              style={
+                styles.resultLabel
+              }
+            >
               {getStatusTitle()}
             </Text>
 
             <Text
               numberOfLines={3}
-              style={styles.resultValue}
+              style={
+                styles.resultValue
+              }
             >
               {scannedValue}
             </Text>
 
-            <Text style={styles.resultNote}>
+            <Text
+              style={
+                styles.resultNote
+              }
+            >
               {statusMessage}
             </Text>
 
             <Pressable
-              style={styles.primaryButton}
-              onPress={resetScanner}
+              style={
+                styles.primaryButton
+              }
+              onPress={
+                resetScanner
+              }
             >
-              <Text style={styles.primaryButtonText}>
+              <Text
+                style={
+                  styles.primaryButtonText
+                }
+              >
                 Scan another ticket
               </Text>
             </Pressable>
           </View>
         ) : (
-          <View style={styles.readyPill}>
-            <Text style={styles.readyText}>
+          <View
+            style={
+              styles.readyPill
+            }
+          >
+            <Text
+              style={
+                styles.readyText
+              }
+            >
               Ready to scan
             </Text>
           </View>
@@ -679,7 +839,7 @@ export default function ScannerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+чconst styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000000",
