@@ -8,7 +8,7 @@ const checkinRoutes = require('./routes/checkinRoutes');
 const { cors, notFound, errorHandler } = require('./middleware/common');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3001;
 
 app.disable('x-powered-by');
 app.use(cors);
@@ -27,7 +27,7 @@ app.use('/api/checkin', checkinRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-// app экспортируется для интеграционных тестов; сервер стартует только при прямом запуске.
+
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Сервер запущен на http://localhost:${PORT}`);
