@@ -1,9 +1,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type {
-  CachedScan,
-  CheckInStatus,
+  VerifyStatus,
 } from "../types/checkIn";
+
+type CachedScanStatus =
+  | VerifyStatus
+  | "OFFLINE"
+  | "DUPLICATE";
+
+type CachedScan = {
+  qrToken: string;
+  scannedAt: string;
+  status: CachedScanStatus;
+};
 
 const CACHE_KEY = "biletflow.recent-ticket-scans";
 
@@ -28,7 +38,7 @@ async function getAllScans(): Promise<CachedScan[]> {
 
 export async function cacheScan(
   qrToken: string,
-  status: CheckInStatus | "OFFLINE"
+  status: CachedScanStatus
 ): Promise<void> {
   const scans = await getAllScans();
 
