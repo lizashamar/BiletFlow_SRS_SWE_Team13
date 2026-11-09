@@ -56,6 +56,8 @@ type ScanUiStatus =
   | "ERROR"
   | null;
 
+// Временно используем event 1.
+// Позже можно заменить на экран выбора мероприятия.
 const EVENT_ID = 1;
 
 export default function ScannerScreen() {
@@ -135,9 +137,7 @@ export default function ScannerScreen() {
       return;
     }
 
-    setIsDownloadingManifest(
-      true
-    );
+    setIsDownloadingManifest(true);
 
     try {
       const manifest =
@@ -150,21 +150,15 @@ export default function ScannerScreen() {
         manifest
       );
 
-      setIsManifestAvailable(
-        true
-      );
+      setIsManifestAvailable(true);
 
-      setScanStatus(
-        "SYNCED"
-      );
+      setScanStatus("SYNCED");
 
       setStatusMessage(
         `Offline manifest downloaded successfully for event ${EVENT_ID}.`
       );
     } catch (error) {
-      setScanStatus(
-        "ERROR"
-      );
+      setScanStatus("ERROR");
 
       setStatusMessage(
         error instanceof Error
@@ -172,9 +166,7 @@ export default function ScannerScreen() {
           : "Unable to download offline manifest."
       );
     } finally {
-      setIsDownloadingManifest(
-        false
-      );
+      setIsDownloadingManifest(false);
     }
   }
 
@@ -197,21 +189,13 @@ export default function ScannerScreen() {
       const queue =
         await getOfflineQueue();
 
-      if (
-        queue.length === 0
-      ) {
-        setOfflineQueueCount(
-          0
-        );
-
+      if (queue.length === 0) {
+        setOfflineQueueCount(0);
         return;
       }
 
       const batch =
-        queue.slice(
-          0,
-          200
-        );
+        queue.slice(0, 200);
 
       await syncOfflineScans(
         batch,
@@ -220,13 +204,9 @@ export default function ScannerScreen() {
 
       await clearOfflineQueue();
 
-      setOfflineQueueCount(
-        0
-      );
+      setOfflineQueueCount(0);
 
-      setScanStatus(
-        "SYNCED"
-      );
+      setScanStatus("SYNCED");
 
       setStatusMessage(
         `${batch.length} offline scan(s) synchronized successfully.`
@@ -237,13 +217,15 @@ export default function ScannerScreen() {
         error
       );
 
+      setScanStatus("ERROR");
+
       setStatusMessage(
-        "Offline scans are still queued and will be synchronized later."
+        error instanceof Error
+          ? error.message
+          : "Offline scans are still queued and will be synchronized later."
       );
     } finally {
-      setIsSyncing(
-        false
-      );
+      setIsSyncing(false);
     }
   }
 
@@ -259,9 +241,7 @@ export default function ScannerScreen() {
           const online =
             state.isConnected === true;
 
-          setIsOnline(
-            online
-          );
+          setIsOnline(online);
 
           if (online) {
             void syncQueuedScans();
@@ -282,13 +262,9 @@ export default function ScannerScreen() {
     const qrToken =
       result.data;
 
-    setScannedValue(
-      qrToken
-    );
+    setScannedValue(qrToken);
 
-    setScanStatus(
-      null
-    );
+    setScanStatus(null);
 
     setStatusMessage(
       "Processing ticket..."
@@ -482,6 +458,36 @@ export default function ScannerScreen() {
     }
   }
 
+  function getDefaultStatusMessage(
+    status: VerifyStatus
+  ) {
+    switch (status) {
+      case "CHECKED_IN":
+        return "Ticket checked in successfully.";
+
+      case "VALID":
+        return "Ticket is valid.";
+
+      case "ALREADY_CHECKED_IN":
+        return "Ticket has already been checked in.";
+
+      case "REJECTED":
+        return "Ticket was rejected.";
+
+      case "INVALID":
+        return "Ticket is invalid.";
+
+      case "WRONG_EVENT":
+        return "Ticket belongs to a different event.";
+
+      case "TEMPORARY_ERROR":
+        return "Temporary verification error.";
+
+      default:
+        return "Ticket processed.";
+    }
+  }
+
   function getStatusTitle() {
     switch (scanStatus) {
       case "CHECKED_IN":
@@ -621,26 +627,10 @@ export default function ScannerScreen() {
         }
       />
 
-      <SafeAreaView
-        style={
-          styles.overlay
-        }
-      >
-        <View
-          style={
-            styles.topBar
-          }
-        >
-          <View
-            style={
-              styles.staffInfo
-            }
-          >
-            <Text
-              style={
-                styles.staffLabel
-              }
-            >
+      <SafeAreaView style={styles.overlay}>
+        <View style={styles.topBar}>
+          <View style={styles.staffInfo}>
+            <Text style={styles.staffLabel}>
               SIGNED IN AS
             </Text>
 
@@ -665,13 +655,8 @@ export default function ScannerScreen() {
                 : "● Offline"}
             </Text>
 
-            <Text
-              style={
-                styles.queueText
-              }
-            >
-              Offline queue:{" "}
-              {offlineQueueCount}
+            <Text style={styles.queueText}>
+              Offline queue: {offlineQueueCount}
             </Text>
           </View>
 
@@ -693,16 +678,8 @@ export default function ScannerScreen() {
           </Pressable>
         </View>
 
-        <View
-          style={
-            styles.manifestPanel
-          }
-        >
-          <Text
-            style={
-              styles.manifestStatus
-            }
-          >
+        <View style={styles.manifestPanel}>
+          <Text style={styles.manifestStatus}>
             Offline manifest:{" "}
             {isManifestAvailable
               ? "Available"
@@ -710,9 +687,7 @@ export default function ScannerScreen() {
           </Text>
 
           <Pressable
-            style={
-              styles.smallButton
-            }
+            style={styles.smallButton}
             disabled={
               isDownloadingManifest ||
               !isOnline
@@ -721,16 +696,33 @@ export default function ScannerScreen() {
               void downloadManifest()
             }
           >
-            <Text
-              style={
-                styles.smallButtonText
-              }
-            >
+            <Text style={styles.smallButtonText}>
               {isDownloadingManifest
                 ? "Downloading..."
                 : "Download Offline Manifest"}
             </Text>
           </Pressable>
+
+          {offlineQueueCount > 0 &&
+          isOnline ? (
+            <Pressable
+              style={styles.smallButton}
+              disabled={isSyncing}
+              onPress={() =>
+                void syncQueuedScans()
+              }
+            >
+              <Text style={styles.smallButtonText}>
+                {isSyncing
+                  ? "Synchronizing..."
+                  : "Sync Offline Scans"}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={styles.scanArea}>
+          <View style={styles.frame} />
 
           {offlineQueueCount >
             0 &&
@@ -847,233 +839,224 @@ export default function ScannerScreen() {
   );
 }
 
-const styles =
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: "#000000",
-    },
+чconst styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
 
-    centered: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: "#030712",
-      padding: 24,
-    },
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#030712",
+    padding: 24,
+  },
 
-    permissionContainer: {
-      flex: 1,
-      justifyContent: "center",
-      padding: 24,
-      backgroundColor: "#030712",
-    },
+  permissionContainer: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "#030712",
+  },
 
-    permissionCard: {
-      padding: 24,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: "#1f2937",
-      backgroundColor: "#111827",
-    },
+  permissionCard: {
+    padding: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    backgroundColor: "#111827",
+  },
 
-    permissionTitle: {
-      color: "#ffffff",
-      fontSize: 24,
-      fontWeight: "800",
-      marginBottom: 10,
-    },
+  permissionTitle: {
+    color: "#ffffff",
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: 10,
+  },
 
-    infoText: {
-      color: "#d1d5db",
-      fontSize: 16,
-      lineHeight: 23,
-      textAlign: "center",
-    },
+  infoText: {
+    color: "#d1d5db",
+    fontSize: 16,
+    lineHeight: 23,
+    textAlign: "center",
+  },
 
-    hint: {
-      color: "#9ca3af",
-      marginTop: 14,
-    },
+  hint: {
+    color: "#9ca3af",
+    marginTop: 14,
+  },
 
-    overlay: {
-      flex: 1,
-      justifyContent:
-        "space-between",
-      padding: 20,
-      backgroundColor:
-        "rgba(0,0,0,0.18)",
-    },
+  overlay: {
+    flex: 1,
+    justifyContent: "space-between",
+    padding: 20,
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
 
-    topBar: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent:
-        "space-between",
-      padding: 14,
-      borderRadius: 16,
-      backgroundColor:
-        "rgba(3,7,18,0.82)",
-    },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "rgba(3,7,18,0.82)",
+  },
 
-    staffInfo: {
-      flex: 1,
-      paddingRight: 10,
-    },
+  staffInfo: {
+    flex: 1,
+    paddingRight: 10,
+  },
 
-    staffLabel: {
-      color: "#93c5fd",
-      fontSize: 11,
-      fontWeight: "800",
-    },
+  staffLabel: {
+    color: "#93c5fd",
+    fontSize: 11,
+    fontWeight: "800",
+  },
 
-    staffName: {
-      color: "#ffffff",
-      fontSize: 15,
-      fontWeight: "700",
-      marginTop: 3,
-    },
+  staffName: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
+    marginTop: 3,
+  },
 
-    onlineText: {
-      color: "#86efac",
-      marginTop: 5,
-      fontSize: 12,
-      fontWeight: "700",
-    },
+  onlineText: {
+    color: "#86efac",
+    marginTop: 5,
+    fontSize: 12,
+    fontWeight: "700",
+  },
 
-    offlineText: {
-      color: "#fca5a5",
-      marginTop: 5,
-      fontSize: 12,
-      fontWeight: "700",
-    },
+  offlineText: {
+    color: "#fca5a5",
+    marginTop: 5,
+    fontSize: 12,
+    fontWeight: "700",
+  },
 
-    queueText: {
-      color: "#d1d5db",
-      marginTop: 3,
-      fontSize: 12,
-    },
+  queueText: {
+    color: "#d1d5db",
+    marginTop: 3,
+    fontSize: 12,
+  },
 
-    logoutButton: {
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: "#4b5563",
-    },
+  logoutButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#4b5563",
+  },
 
-    logoutText: {
-      color: "#ffffff",
-      fontWeight: "700",
-    },
+  logoutText: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
 
-    manifestPanel: {
-      backgroundColor:
-        "rgba(3,7,18,0.88)",
-      borderRadius: 14,
-      padding: 12,
-      borderWidth: 1,
-      borderColor: "#374151",
-    },
+  manifestPanel: {
+    backgroundColor: "rgba(3,7,18,0.88)",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
 
-    manifestStatus: {
-      color: "#ffffff",
-      fontWeight: "700",
-      marginBottom: 8,
-    },
+  manifestStatus: {
+    color: "#ffffff",
+    fontWeight: "700",
+    marginBottom: 8,
+  },
 
-    smallButton: {
-      backgroundColor: "#1d4ed8",
-      minHeight: 40,
-      justifyContent: "center",
-      alignItems: "center",
-      paddingHorizontal: 12,
-      borderRadius: 10,
-      marginTop: 6,
-    },
+  smallButton: {
+    backgroundColor: "#1d4ed8",
+    minHeight: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginTop: 6,
+  },
 
-    smallButtonText: {
-      color: "#ffffff",
-      fontWeight: "700",
-    },
+  smallButtonText: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
 
-    scanArea: {
-      alignItems: "center",
-    },
+  scanArea: {
+    alignItems: "center",
+  },
 
-    frame: {
-      width: 260,
-      height: 260,
-      borderWidth: 4,
-      borderColor: "#ffffff",
-      borderRadius: 20,
-    },
+  frame: {
+    width: 260,
+    height: 260,
+    borderWidth: 4,
+    borderColor: "#ffffff",
+    borderRadius: 20,
+  },
 
-    instruction: {
-      color: "#ffffff",
-      fontWeight: "700",
-      marginTop: 18,
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 999,
-      backgroundColor:
-        "rgba(3,7,18,0.72)",
-    },
+  instruction: {
+    color: "#ffffff",
+    fontWeight: "700",
+    marginTop: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "rgba(3,7,18,0.72)",
+  },
 
-    readyPill: {
-      alignSelf: "center",
-      borderRadius: 999,
-      paddingVertical: 11,
-      paddingHorizontal: 18,
-      backgroundColor:
-        "rgba(6,78,59,0.88)",
-    },
+  readyPill: {
+    alignSelf: "center",
+    borderRadius: 999,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    backgroundColor: "rgba(6,78,59,0.88)",
+  },
 
-    readyText: {
-      color: "#d1fae5",
-      fontWeight: "800",
-    },
+  readyText: {
+    color: "#d1fae5",
+    fontWeight: "800",
+  },
 
-    resultCard: {
-      borderRadius: 18,
-      padding: 18,
-      backgroundColor:
-        "rgba(3,7,18,0.94)",
-      borderWidth: 1,
-      borderColor: "#374151",
-    },
+  resultCard: {
+    borderRadius: 18,
+    padding: 18,
+    backgroundColor: "rgba(3,7,18,0.94)",
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
 
-    resultLabel: {
-      color: "#86efac",
-      fontWeight: "800",
-      fontSize: 18,
-    },
+  resultLabel: {
+    color: "#86efac",
+    fontWeight: "800",
+    fontSize: 18,
+  },
 
-    resultValue: {
-      color: "#ffffff",
-      fontSize: 16,
-      fontWeight: "700",
-      marginTop: 8,
-    },
+  resultValue: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 8,
+  },
 
-    resultNote: {
-      color: "#d1d5db",
-      marginTop: 8,
-      marginBottom: 14,
-    },
+  resultNote: {
+    color: "#d1d5db",
+    marginTop: 8,
+    marginBottom: 14,
+  },
 
-    primaryButton: {
-      minHeight: 50,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 12,
-      backgroundColor: "#2563eb",
-      marginTop: 18,
-    },
+  primaryButton: {
+    minHeight: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#2563eb",
+    marginTop: 18,
+  },
 
-    primaryButtonText: {
-      color: "#ffffff",
-      fontWeight: "800",
-      fontSize: 16,
-    },
-  });
+  primaryButtonText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 16,
+  },
+});

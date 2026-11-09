@@ -15,8 +15,7 @@ type CachedScan = {
   status: CachedScanStatus;
 };
 
-const CACHE_KEY =
-  "biletflow.recent-ticket-scans";
+const CACHE_KEY = "biletflow.recent-ticket-scans";
 
 const MAX_CACHE_SIZE = 200;
 

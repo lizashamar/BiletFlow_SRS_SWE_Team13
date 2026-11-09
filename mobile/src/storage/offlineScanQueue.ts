@@ -10,16 +10,22 @@ const QUEUE_KEY =
 export async function getOfflineQueue():
   Promise<OfflineScan[]> {
   const value =
-    await AsyncStorage.getItem(QUEUE_KEY);
+    await AsyncStorage.getItem(
+      QUEUE_KEY
+    );
 
   if (!value) {
     return [];
   }
 
   try {
-    return JSON.parse(value) as OfflineScan[];
+    return JSON.parse(
+      value
+    ) as OfflineScan[];
   } catch {
-    await AsyncStorage.removeItem(QUEUE_KEY);
+    await AsyncStorage.removeItem(
+      QUEUE_KEY
+    );
 
     return [];
   }
@@ -28,13 +34,17 @@ export async function getOfflineQueue():
 export async function addOfflineScan(
   scan: OfflineScan
 ): Promise<void> {
-  const queue = await getOfflineQueue();
+  const queue =
+    await getOfflineQueue();
 
-  const alreadyQueued = queue.some(
-    (item) =>
-      item.qrToken === scan.qrToken &&
-      item.eventId === scan.eventId
-  );
+  const alreadyQueued =
+    queue.some(
+      (item) =>
+        item.qrToken ===
+          scan.qrToken &&
+        item.eventId ===
+          scan.eventId
+    );
 
   if (alreadyQueued) {
     return;
