@@ -1,25 +1,30 @@
 export type VerifyStatus =
   | "CHECKED_IN"
-  | "VALID"
   | "ALREADY_CHECKED_IN"
   | "REJECTED"
-  | "INVALID"
-  | "WRONG_EVENT"
-  | "TEMPORARY_ERROR";
+  | "INVALID";
 
 export type VerifyResponse = {
   status: VerifyStatus;
   message?: string;
-
   ticket?: {
     id?: number;
     attendeeName?: string;
+    eventName?: string;
   };
+};
+
+export type ScannerEvent = {
+  id: number;
+  title: string;
+  venueName: string;
+  startTime: string;
 };
 
 export type ManifestTicket = {
   digest: string;
   status: string;
+  attendeeName?: string;
 };
 
 export type OfflineManifest = {
@@ -35,10 +40,11 @@ export type OfflineScan = {
 };
 
 export type SyncScanResult = {
-  status: string;
-  message?: string;
+  status: "CHECKED_IN" | "ALREADY_CHECKED_IN" | "REJECTED" | "ERROR";
+  reason?: string;
 };
 
 export type SyncResponse = {
   results: SyncScanResult[];
+  summary: Record<string, number>;
 };

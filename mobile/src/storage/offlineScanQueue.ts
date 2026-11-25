@@ -61,9 +61,22 @@ export async function addOfflineScan(
   );
 }
 
-export async function clearOfflineQueue():
-  Promise<void> {
-  await AsyncStorage.removeItem(
-    QUEUE_KEY
+export async function removeFromOfflineQueue(
+  synced: OfflineScan[]
+): Promise<void> {
+  const queue = await getOfflineQueue();
+
+  const remaining = queue.filter(
+    (item) =>
+      !synced.some(
+        (s) =>
+          s.qrToken === item.qrToken &&
+          s.eventId === item.eventId
+      )
+  );
+
+  await AsyncStorage.setItem(
+    QUEUE_KEY,
+    JSON.stringify(remaining)
   );
 }

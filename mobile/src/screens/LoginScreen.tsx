@@ -71,7 +71,7 @@ export default function LoginScreen() {
           </Text>
 
           <Text style={styles.subtitle}>
-            Use your Event Admin account.
+            Use a gate staff or organizer account.
           </Text>
 
           <Text style={styles.label}>

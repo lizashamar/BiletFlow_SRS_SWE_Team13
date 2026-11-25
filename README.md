@@ -28,6 +28,24 @@ Seeded accounts (password `Password123!`): `attendee@biletflow.kz`, `organizer@b
 
 Backend tests (no database needed): `node --test backend_src/tests/api.test.js`
 
+## Mobile scanner (Expo)
+
+1. Install **Expo Go** (SDK 57) on the phone; phone and laptop must be on the same Wi-Fi.
+2. Find the laptop IP (`ipconfig` → IPv4) and create `mobile/.env`:
+   ```
+   EXPO_PUBLIC_API_URL=http://<laptop-ip>:5000
+   ```
+3. With the API running (`npm start` in the root):
+   ```
+   cd mobile
+   npm install
+   npx expo start
+   ```
+4. Scan the terminal QR with Expo Go, sign in as `scanner1@biletflow.kz`, pick the event, scan a ticket QR from the website's My Tickets page.
+
+If the phone cannot reach the laptop, allow Node.js through Windows Firewall or try `npx expo start --tunnel`.
+Offline mode: tap "Download manifest" while online; scans made offline are queued and synced automatically when the connection returns.
+
 ## Demo journey
 
 1. Attendee signs in → Events → Get tickets → Place Order → My Tickets shows the QR.
