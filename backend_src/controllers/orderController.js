@@ -4,6 +4,7 @@ const { HttpError, handleError } = require('../utils/httpError');
 const { generateQrHash } = require('../utils/qr');
 
 const MAX_TICKETS_PER_ORDER = 10;
+const MAX_TICKETS_PER_ATTENDEE = Number(process.env.MAX_TICKETS_PER_ATTENDEE) || 10;
 
 function parseOrderBody(body) {
   const { eventId, items } = body || {};
@@ -60,6 +61,20 @@ exports.createOrder = async (req, res) => {
       });
       if (!event || !event.isPublished) throw new HttpError(404, 'Event not found');
       if (event.endTime < new Date()) throw new HttpError(400, 'Event has already ended');
+
+      const owned = await tx.ticket.count({
+        where: {
+          status: { in: ['VALID', 'CHECKED_IN'] },
+          order: { userId: user.id, eventId, status: 'COMPLETED' },
+        },
+      });
+      const requested = items.reduce((sum, i) => sum + i.quantity, 0);
+      if (owned + requested > MAX_TICKETS_PER_ATTENDEE) {
+        throw new HttpError(
+          409,
+          `Ticket limit reached: max ${MAX_TICKETS_PER_ATTENDEE} per attendee for this event (you already have ${owned})`
+        );
+      }
 
       let totalCents = 0;
       const toIssue = [];

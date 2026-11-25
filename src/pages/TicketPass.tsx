@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
 import EventCover from "../components/EventCover"
-import { api, errorText, shortDate } from "../api"
+import Icon from "../components/Icon"
+import { api, calendarUrl, errorText, shortDate } from "../api"
 
 type Ticket = {
   id: number
@@ -109,6 +110,9 @@ function TicketPass() {
                 </div>
                 <div><small>Order</small>#{t.order.id}</div>
               </div>
+              <a className="calendar-link no-print" href={calendarUrl(t.order.event.id)} style={{ marginTop: 16 }}>
+                <Icon name="calendar" /> Add to calendar
+              </a>
             </div>
           </div>
           <div className="ticket-qr">

@@ -54,3 +54,10 @@ Offline mode: tap "Download manifest" while online; scans made offline are queue
 4. Organizer signs in → Organizer Dashboard shows sales, revenue and check-ins; Create Event publishes a new event.
 
 Payments are simulated: orders complete immediately and no card is charged.
+
+## Business rules
+
+- Check-in opens 3 hours before an event starts and closes when it ends. The seed makes "Tech Conference Astana 2026" live from the moment you run `npx prisma db seed` for 24 hours, so run the seed shortly before the demo.
+- An attendee can hold at most 10 active tickets per event across all orders (`MAX_TICKETS_PER_ATTENDEE`).
+- Organizers can edit event details, publish/unpublish, and refund orders that have no checked-in tickets.
+- Gate staff can search attendees by name, check them in manually, and undo a mistaken check-in.

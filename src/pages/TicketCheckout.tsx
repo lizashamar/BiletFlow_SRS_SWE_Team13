@@ -91,7 +91,7 @@ function TicketCheckout({ event: initialEvent, user, onBack, onViewTickets }: Pr
   return (
     <main className="page-container">
       <button className="secondary-button small-button" onClick={onBack}>
-        <Icon name="arrow-left" /> Back to events
+        <Icon name="arrow-left" /> Back
       </button>
 
       <div className="checkout-layout">

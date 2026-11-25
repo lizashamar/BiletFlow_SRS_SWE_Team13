@@ -144,5 +144,10 @@ export const shortDate = (value: string) => {
     : `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} · ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
 }
 
-export const errorText =(err: unknown, fallback: string) =>
+export const priceLabel = (e: { price: number }) =>
+  e.price > 0 ? `from ₸ ${e.price.toLocaleString("ru-RU")}` : "Free entry"
+
+export const calendarUrl = (eventId: number) => `${API_URL}/events/${eventId}/calendar.ics`
+
+export const errorText = (err: unknown, fallback: string) =>
   err instanceof Error ? err.message : fallback

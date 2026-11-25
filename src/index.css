@@ -989,3 +989,146 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+.date-field {
+  flex: 0 1 220px;
+}
+
+.date-field select {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  padding: 15px 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.event-card {
+  cursor: pointer;
+}
+
+.live-badge {
+  background: #dc2626;
+  color: white;
+  margin-left: 6px;
+}
+
+.event-cover .cover-live {
+  left: auto;
+  right: 12px;
+}
+
+.detail-hero {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  min-height: 260px;
+  display: flex;
+  align-items: flex-end;
+  padding: 28px;
+  color: white;
+  margin-top: 20px;
+}
+
+.detail-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 20%, rgba(0, 0, 0, 0.7) 100%);
+}
+
+.detail-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.detail-hero h1 {
+  color: white;
+  margin: 12px 0 0;
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.info-list {
+  display: grid;
+  gap: 14px;
+}
+
+.info-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.info-item .icon-button {
+  flex: none;
+}
+
+.info-item small {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.price-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.price-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.price-row:last-child {
+  border-bottom: 0;
+}
+
+.price-row small {
+  display: block;
+  color: var(--muted);
+}
+
+.calendar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.calendar-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 860px) {
+  .detail-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.panel .search-field input {
+  display: block;
+  width: auto;
+  flex: 1;
+  margin: 0;
+  border: 0;
+  padding: 14px 0;
+  box-shadow: none;
+}
+
+.panel .search-field {
+  display: flex;
+  font-weight: 400;
+}

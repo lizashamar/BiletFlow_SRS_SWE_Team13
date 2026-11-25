@@ -20,6 +20,7 @@ let tokens;
 let ids;
 
 const DAY = 24 * 3600 * 1000;
+const HOUR = 3600 * 1000;
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 async function api(method, path, { token, body, raw } = {}) {
@@ -62,7 +63,7 @@ test.beforeEach(async () => {
     db.event.create({
       data: {
         organizerId, title, venueName: 'Arena', venueAddress: 'Astana', capacity: 1000,
-        startTime: new Date(Date.now() + 7 * DAY), endTime: new Date(Date.now() + 8 * DAY),
+        startTime: new Date(Date.now() - 2 * HOUR), endTime: new Date(Date.now() + DAY),
         isPublished: true, paidSalesActive: true, ...over,
       },
     });
@@ -567,4 +568,49 @@ test('health endpoint & CORS preflight', async () => {
   const r = await fetch(base + '/api/orders', { method: 'OPTIONS' });
   assert.equal(r.status, 204);
   assert.equal(r.headers.get('access-control-allow-origin'), '*');
+});
+
+test('orders: per-attendee limit across several orders for one event', async () => {
+  const big = await db.ticketType.create({ data: { eventId: ids.event, name: 'Fan', price: 0, totalQuantity: 30, remainingQuantity: 30 } });
+  assert.equal((await order(tokens.attendee, [{ ticketTypeId: big.id, quantity: 6 }])).status, 201);
+  assert.equal((await order(tokens.attendee, [{ ticketTypeId: big.id, quantity: 4 }])).status, 201);
+  const over = await order(tokens.attendee, [{ ticketTypeId: big.id, quantity: 1 }]);
+  assert.equal(over.status, 409);
+  assert.match(over.body.error, /limit/i);
+  assert.equal((await order(tokens.attendee2, [{ ticketTypeId: big.id, quantity: 1 }])).status, 201);
+  const fresh = await db.ticketType.findUnique({ where: { id: big.id } });
+  assert.equal(fresh.remainingQuantity, 19);
+});
+
+test('check-in: window opens 3h before start and closes at the end', async () => {
+  const mkEvent = (title, start, end) => db.event.create({
+    data: { organizerId: users.organizer.id, title, venueName: 'v', venueAddress: 'a', capacity: 10, isPublished: true, startTime: new Date(start), endTime: new Date(end) },
+  });
+  const future = await mkEvent('Future', Date.now() + 2 * DAY, Date.now() + 3 * DAY);
+  const soon = await mkEvent('Soon', Date.now() + 2 * HOUR, Date.now() + 5 * HOUR);
+  const issue = async (eventId) => {
+    const tt = await db.ticketType.create({ data: { eventId, name: 'Free', price: 0, totalQuantity: 5, remainingQuantity: 5 } });
+    const r = await order(tokens.attendee, [{ ticketTypeId: tt.id, quantity: 1 }], eventId);
+    assert.equal(r.status, 201);
+    return r.body.order.tickets[0];
+  };
+
+  const early = await issue(future.id);
+  const tooEarly = await api('POST', '/api/checkin/verify', { token: tokens.scanner, body: { qrCodeHash: early.qrCodeHash } });
+  assert.equal(tooEarly.status, 403);
+  assert.match(tooEarly.body.error, /not open yet/);
+  assert.equal((await db.ticket.findUnique({ where: { id: early.id } })).status, 'VALID');
+
+  const mobile = await api('POST', '/api/tickets/check-in', { token: tokens.scanner, body: { qrToken: early.qrCodeHash } });
+  assert.equal(mobile.status, 200);
+  assert.equal(mobile.body.status, 'CANCELLED');
+
+  const ok = await issue(soon.id);
+  assert.equal((await api('POST', '/api/checkin/verify', { token: tokens.scanner, body: { qrCodeHash: ok.qrCodeHash } })).status, 200);
+
+  const t = await issue(ids.event);
+  await db.event.update({ where: { id: ids.event }, data: { endTime: new Date(Date.now() - 1000) } });
+  const late = await api('POST', '/api/checkin/verify', { token: tokens.scanner, body: { qrCodeHash: t.qrCodeHash } });
+  assert.equal(late.status, 403);
+  assert.match(late.body.error, /closed/);
 });
