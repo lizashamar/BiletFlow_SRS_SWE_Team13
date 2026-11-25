@@ -1,174 +1,117 @@
-
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { QRCodeSVG } from "qrcode.react"
+import { api, dateTime, errorText } from "../api"
 
 type Ticket = {
   id: number
-  status: string
-  attendeeName?: string | null
-  ticketType?: { name: string; price: number | string }
-  order?: {
-    event?: {
+  status: "VALID" | "CHECKED_IN" | "CANCELLED" | "REFUNDED"
+  attendeeName: string
+  qrCodeHash: string
+  ticketType: { name: string; price: number | string }
+  order: {
+    id: number
+    event: {
+      id: number
       title: string
-      venueName?: string | null
-      venueAddress?: string | null
-      startTime?: string
+      venueName: string
+      venueAddress: string
+      startTime: string
     }
   }
 }
 
+const STATUS_LABEL: Record<Ticket["status"], string> = {
+  VALID: "Valid",
+  CHECKED_IN: "Checked in",
+  CANCELLED: "Cancelled",
+  REFUNDED: "Refunded",
+}
+
 function TicketPass() {
-  const [ticket, setTicket] = useState<Ticket | null>(null)
+  const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
-  const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
+  const [copied, setCopied] = useState<number | null>(null)
 
-  useEffect(() => {
-    const fetchTickets = async () => {
-      try {
-        const token = localStorage.getItem("token")
-
-        if (!token) {
-          throw new Error("Log in as an attendee to view your tickets.")
-        }
-
-        const response = await fetch("http://localhost:5000/api/tickets", {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-
-        if (!response.ok) {
-          throw new Error("Could not load your tickets.")
-        }
-
-        const tickets: Ticket[] = await response.json()
-
-        if (tickets.length === 0) {
-          throw new Error("No purchased tickets were found for this account.")
-        }
-
-        setTicket(tickets[0])
-      } catch (error) {
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : "Something went wrong while loading your ticket."
-        )
-      } finally {
-        setLoading(false)
-      }
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError("")
+    try {
+      setTickets(await api<Ticket[]>("/tickets"))
+    } catch (err) {
+      setError(errorText(err, "Could not load your tickets."))
+    } finally {
+      setLoading(false)
     }
-
-    fetchTickets()
   }, [])
 
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const copy = async (t: Ticket) => {
+    await navigator.clipboard?.writeText(t.qrCodeHash).catch(() => undefined)
+    setCopied(t.id)
+    setTimeout(() => setCopied(null), 1500)
+  }
+
   return (
-    <main className="ticket-page">
+    <main className="page-container ticket-page">
       <style>{`
         @media print {
-          .app-nav, .no-print {
-            display: none !important;
-          }
-          body {
-            background: white !important;
-          }
-          .ticket-page {
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .ticket-card {
-            box-shadow: none !important;
-            border: 2px solid #111827 !important;
-          }
+          .app-nav, .no-print { display: none !important; }
+          body { background: white !important; }
+          .ticket-card { box-shadow: none !important; border: 2px solid #111827 !important; break-inside: avoid; }
         }
       `}</style>
 
-      <div className="no-print" style={{ marginBottom: 24 }}>
-        <h1>My Digital Ticket</h1>
-        <p>View your ticket and save a printable copy as a PDF.</p>
+      <div className="no-print page-header">
+        <div>
+          <h1>My Tickets</h1>
+          <p className="muted">Show the QR code at the entrance. You can print or save tickets as PDF.</p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="secondary-button" onClick={() => void load()} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+          {tickets.length > 0 && (
+            <button className="primary-button" style={{ marginTop: 0 }} onClick={() => window.print()}>
+              Print / Save as PDF
+            </button>
+          )}
+        </div>
       </div>
 
-      {loading && <p>Loading your ticket...</p>}
+      {loading && tickets.length === 0 && <p>Loading your tickets...</p>}
+      {error && <p role="alert" className="error-box">{error}</p>}
+      {!loading && !error && tickets.length === 0 && <p>You have no tickets yet. Buy one from the Events page.</p>}
 
-      {!loading && message && (
-        <section>
-          <p>{message}</p>
-          <p>
-            Make sure you have signed in with the attendee account used to
-            purchase the ticket.
-          </p>
-        </section>
-      )}
-
-      {ticket && (
-        <section
-          className="ticket-card"
-          style={{
-            maxWidth: 650,
-            margin: "24px auto",
-            padding: 28,
-            border: "1px solid #cbd5e1",
-            borderRadius: 16,
-            background: "white",
-            boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
-          }}
-        >
-          <p style={{ color: "#2563eb", fontWeight: 700 }}>BILETFLOW</p>
-          <h2>{ticket.order?.event?.title ?? "Event ticket"}</h2>
-
-          <hr />
-
-          <p>
-            <strong>Attendee:</strong>{" "}
-            {ticket.attendeeName || "Attendee"}
-          </p>
-          <p>
-            <strong>Ticket number:</strong> BF-{ticket.id}
-          </p>
-          <p>
-            <strong>Ticket type:</strong>{" "}
-            {ticket.ticketType?.name ?? "Standard"}
-          </p>
-          <p>
-            <strong>Date:</strong>{" "}
-            {ticket.order?.event?.startTime
-              ? new Date(ticket.order.event.startTime).toLocaleString()
-              : "See event details"}
-          </p>
-          <p>
-            <strong>Venue:</strong>{" "}
-            {ticket.order?.event?.venueName ?? "See event details"}
-          </p>
-          {ticket.order?.event?.venueAddress && (
+      {tickets.map((t) => (
+        <section key={t.id} className="ticket-card">
+          <div className="ticket-info">
+            <p className="brand">BILETFLOW</p>
+            <h2>{t.order.event.title}</h2>
+            <p><strong>Attendee:</strong> {t.attendeeName}</p>
+            <p><strong>Ticket:</strong> BF-{t.id} · {t.ticketType.name}</p>
+            <p><strong>Date:</strong> {dateTime(t.order.event.startTime)}</p>
+            <p><strong>Venue:</strong> {t.order.event.venueName}, {t.order.event.venueAddress}</p>
             <p>
-              <strong>Address:</strong>{" "}
-              {ticket.order.event.venueAddress}
+              <strong>Status:</strong>{" "}
+              <span className={`status-badge status-${t.status.toLowerCase()}`}>{STATUS_LABEL[t.status]}</span>
             </p>
-          )}
-
-          <p>
-            <strong>Status:</strong> {ticket.status}
-          </p>
-
-          <p style={{ color: "#64748b", fontSize: 13 }}>
-            Keep this ticket available when attending the event.
-            Present it to event staff for verification.
-          </p>
-
-          <button
-            className="no-print"
-            onClick={() => window.print()}
-            style={{
-              marginTop: 16,
-              padding: "12px 18px",
-              background: "#2563eb",
-              color: "white",
-              border: 0,
-              borderRadius: 8,
-              cursor: "pointer",
-            }}
-          >
-            Print / Save as PDF
-          </button>
+          </div>
+          <div className="ticket-qr">
+            {t.status === "VALID" || t.status === "CHECKED_IN" ? (
+              <QRCodeSVG value={t.qrCodeHash} size={168} />
+            ) : (
+              <p className="muted">QR disabled</p>
+            )}
+            <button className="link-button no-print" onClick={() => void copy(t)}>
+              {copied === t.id ? "Copied!" : "Copy code"}
+            </button>
+          </div>
         </section>
-      )}
+      ))}
     </main>
   )
 }

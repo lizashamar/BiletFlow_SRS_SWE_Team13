@@ -1,5 +1,3 @@
-// CORS, простой rate-limit и финальные обработчики ошибок.
-
 function cors(req, res, next) {
   const allowed = (process.env.CORS_ORIGIN || '*').trim();
   res.set('Access-Control-Allow-Origin', allowed);
@@ -9,9 +7,8 @@ function cors(req, res, next) {
   return next();
 }
 
-// Фиксированное окно, in-memory (достаточно для одного инстанса). Используется для /login.
 function rateLimit({ windowMs, max, message = 'Too many requests, try again later' }) {
-  const hits = new Map(); // key -> { count, resetAt }
+  const hits = new Map();
   return (req, res, next) => {
     if (process.env.RATE_LIMIT_DISABLED === '1') return next();
     const now = Date.now();
@@ -35,8 +32,6 @@ function notFound(req, res) {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
 }
 
-// Некорректный JSON и т.п. должны давать 400, а не HTML-страницу с 500.
-// eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Malformed JSON body' });
   if (err.type === 'entity.too.large') return res.status(413).json({ error: 'Request body too large' });

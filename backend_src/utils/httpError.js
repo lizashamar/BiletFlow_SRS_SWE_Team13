@@ -5,7 +5,6 @@ class HttpError extends Error {
   }
 }
 
-// Единый обработчик ошибок для контроллеров
 function handleError(res, err) {
   if (err instanceof HttpError) {
     return res.status(err.status).json({ error: err.message });

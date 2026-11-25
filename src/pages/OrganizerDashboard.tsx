@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { api, errorText, money } from "../api"
 
 type OrganizerEvent = {
   id: number
@@ -7,6 +8,7 @@ type OrganizerEvent = {
   endTime?: string
   status?: string
   venueName?: string
+  isPublished: boolean
 }
 type EventStats = {
   event: { id: number; title: string; status: string }
@@ -28,23 +30,11 @@ type Attendee = {
 type EventAnalytics = { event: OrganizerEvent; stats: EventStats; attendees: Attendee[] }
 type DailySales = { date: string; orders: number; revenue: number }
 
-const API_BASE = "http://localhost:5000/api"
-
-async function apiGet<T>(path: string, token: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(body.error || body.message || `Request failed (${response.status})`)
-  return body as T
-}
-const money = (value: number) =>
-  `${Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} ₸`
 const dateLabel = (value: string) => {
   const date = new Date(value)
   return Number.isNaN(date.getTime())
     ? "—"
-    : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+    : date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
 }
 
 function OrganizerDashboard() {
@@ -57,38 +47,35 @@ function OrganizerDashboard() {
   const loadDashboard = useCallback(async () => {
     setLoading(true)
     setError("")
-    const token = localStorage.getItem("token")
-    if (!token) {
-      setAnalytics([])
-      setError("You are not logged in. Please log in with an organizer account and open the dashboard again.")
-      setLoading(false)
-      return
-    }
     try {
-      const events = await apiGet<OrganizerEvent[]>("/events/mine", token)
+      const events = await api<OrganizerEvent[]>("/events/mine")
       const result = await Promise.all(events.map(async (event) => {
-        const stats = await apiGet<EventStats>(`/events/${event.id}/stats`, token)
-        let attendees: Attendee[] = []
-        try {
-          const response = await apiGet<{ attendees: Omit<Attendee, "eventTitle">[] }>(
-            `/events/${event.id}/attendees`, token
-          )
-          attendees = (response.attendees || []).map((a) => ({ ...a, eventTitle: event.title }))
-        } catch (attendeeError) {
-          console.warn(`Could not load attendees for event ${event.id}`, attendeeError)
-        }
+        const [stats, attendeeResponse] = await Promise.all([
+          api<EventStats>(`/events/${event.id}/stats`),
+          api<{ attendees: Omit<Attendee, "eventTitle">[] }>(`/events/${event.id}/attendees`).catch(() => ({ attendees: [] })),
+        ])
+        const attendees = attendeeResponse.attendees.map((a) => ({ ...a, eventTitle: event.title }))
         return { event, stats, attendees }
       }))
       setAnalytics(result)
     } catch (loadError) {
       setAnalytics([])
-      setError(loadError instanceof Error ? loadError.message : "Could not load organizer analytics.")
+      setError(errorText(loadError, "Could not load organizer analytics."))
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => { void loadDashboard() }, [loadDashboard])
+
+  const togglePublish = async (event: OrganizerEvent) => {
+    try {
+      await api(`/events/${event.id}`, { method: "PATCH", body: { isPublished: !event.isPublished } })
+      await loadDashboard()
+    } catch (err) {
+      setError(errorText(err, "Could not update the event."))
+    }
+  }
 
   const visible = useMemo(
     () => selectedEvent === "all" ? analytics : analytics.filter(x => String(x.event.id) === selectedEvent),
@@ -180,13 +167,19 @@ function OrganizerDashboard() {
         <section style={panel}>
           <h2>My Events</h2><div style={{ overflowX: "auto" }}>
             <table style={table}><thead><tr>
-              {["Event", "Date", "Tickets sold", "Capacity", "Net sales", "Check-in"].map(x => <th key={x} style={cell}>{x}</th>)}
+              {["Event", "Date", "Tickets sold", "Capacity", "Net sales", "Check-in", "Visibility"].map(x => <th key={x} style={cell}>{x}</th>)}
             </tr></thead><tbody>
               {visible.map(({ event, stats }) => <tr key={event.id}>
                 <td style={cell}><strong>{event.title}</strong><div style={small}>{event.venueName || ""}</div></td>
                 <td style={cell}>{dateLabel(event.startTime)}</td><td style={cell}>{stats.capacity.sold}</td>
                 <td style={cell}>{stats.capacity.ticketCapacity}</td><td style={cell}>{money(stats.revenue.netRevenue)}</td>
                 <td style={cell}>{stats.attendance.checkedIn} ({stats.attendance.checkInPercent}%)</td>
+                <td style={cell}>
+                  <span style={small}>{event.isPublished ? "Published" : "Draft"}</span>{" "}
+                  <button onClick={() => void togglePublish(event)} style={smallButton}>
+                    {event.isPublished ? "Unpublish" : "Publish"}
+                  </button>
+                </td>
               </tr>)}
             </tbody></table>
           </div>
@@ -242,6 +235,7 @@ const barValue = { fontSize: "11px", color: "#475569", whiteSpace: "nowrap" as c
 const dayText = { fontSize: "12px", color: "#64748b", whiteSpace: "nowrap" as const }
 const small = { color: "#64748b", fontSize: "12px" }
 const button = { padding: "10px 16px", border: 0, borderRadius: "8px", background: "#2563eb", color: "white", cursor: "pointer" }
+const smallButton = { padding: "4px 10px", border: "1px solid #cbd5e1", borderRadius: "6px", background: "white", cursor: "pointer" }
 const select = { padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "white" }
 const errorBox = { padding: "12px 16px", borderRadius: "8px", background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }
 const table = { width: "100%", borderCollapse: "collapse" as const, textAlign: "left" as const }

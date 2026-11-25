@@ -26,14 +26,12 @@ const reqString = (v, field, max) => {
   return v.trim();
 };
 
-// Организатор управляет только своими событиями; PLATFORM_ADMIN — любыми.
 function assertOwner(user, event) {
   if (user.role !== 'PLATFORM_ADMIN' && event.organizerId !== user.id) {
     throw new HttpError(403, 'You can only manage your own events');
   }
 }
 
-// SRS 4.16: Upcoming / Active / Completed (статуса Cancelled в схеме нет)
 function lifecycle(e, now = new Date()) {
   if (e.endTime < now) return 'COMPLETED';
   if (e.startTime <= now) return 'ACTIVE';
@@ -64,14 +62,12 @@ function serializeEvent(e) {
     paidSalesActive: e.paidSalesActive,
     status: lifecycle(e),
     ticketTypes,
-    // поля обратной совместимости со старым моком ({ id, title, price, date })
     date: e.startTime,
     location: e.venueName,
-    price: prices.length ? Math.min(...prices) : 0, // "от" — минимальная цена
+    price: prices.length ? Math.min(...prices) : 0,
   };
 }
 
-// GET /api/events?q=&upcoming=true — опубликованные события вместе с типами билетов
 const getEvents = async (req, res) => {
   try {
     const where = { isPublished: true };
@@ -91,7 +87,6 @@ const getEvents = async (req, res) => {
   }
 };
 
-// Публичный доступ только к опубликованным; черновик видит владелец / PLATFORM_ADMIN.
 async function loadVisibleEvent(id, user) {
   const event = await prisma.event.findUnique({
     where: { id },
@@ -102,7 +97,6 @@ async function loadVisibleEvent(id, user) {
   return event;
 }
 
-// GET /api/events/:id (optionalAuth)
 const getEventById = async (req, res) => {
   try {
     const event = await loadVisibleEvent(parseId(req.params.id), req.user);
@@ -129,7 +123,6 @@ function parseTicketTypes(list) {
   });
 }
 
-// POST /api/events — создаёт событие (всегда черновик) вместе с типами билетов
 const createEvent = async (req, res) => {
   try {
     const b = req.body || {};
@@ -180,7 +173,6 @@ const createEvent = async (req, res) => {
   }
 };
 
-// GET /api/events/mine?status=UPCOMING|ACTIVE|COMPLETED
 const getMyEvents = async (req, res) => {
   try {
     const where = req.user.role === 'PLATFORM_ADMIN' ? {} : { organizerId: req.user.id };
@@ -211,7 +203,6 @@ async function loadOwnedEvent(req) {
   return event;
 }
 
-// PATCH /api/events/:id — редактирование и публикация/снятие с публикации
 const updateEvent = async (req, res) => {
   try {
     const event = await loadOwnedEvent(req);
@@ -259,8 +250,6 @@ const updateEvent = async (req, res) => {
   }
 };
 
-// POST /api/events/:id/activate-paid-sales { acceptTerms, payoutAccount }
-// SRS 4.5: ДЕМО-симуляция (без реальных платежей): проверяем чек-лист и включаем платные продажи.
 const activatePaidSales = async (req, res) => {
   try {
     const event = await loadOwnedEvent(req);
@@ -293,7 +282,6 @@ const activatePaidSales = async (req, res) => {
   }
 };
 
-// GET /api/events/:id/stats — аналитика организатора (SRS 4.15) по данным БД
 const getEventStats = async (req, res) => {
   try {
     const event = await loadOwnedEvent(req);
@@ -368,7 +356,40 @@ const getEventStats = async (req, res) => {
   }
 };
 
-// GET /api/events/:id/attendees?status=VALID|CHECKED_IN|CANCELLED|REFUNDED
+const getEventAnalytics = async (req, res) => {
+  try {
+    const event = await loadOwnedEvent(req);
+    const [orders, tickets] = await Promise.all([
+      prisma.order.findMany({ where: { eventId: event.id, status: 'COMPLETED' }, select: { totalAmount: true } }),
+      prisma.ticket.findMany({
+        where: { order: { eventId: event.id, status: 'COMPLETED' } },
+        select: { status: true },
+      }),
+    ]);
+    const totalRevenue = round2(orders.reduce((s, o) => s + Number(o.totalAmount), 0));
+    const totalSoldTickets = tickets.length;
+    const checkedInCount = tickets.filter((t) => t.status === 'CHECKED_IN').length;
+    const checkInRate = totalSoldTickets ? ((checkedInCount / totalSoldTickets) * 100).toFixed(2) : '0.00';
+
+    res.json({
+      eventId: event.id,
+      title: event.title,
+      totalRevenue,
+      totalSoldTickets,
+      checkedInCount,
+      checkInRate: `${checkInRate}%`,
+      ticketTypes: event.ticketTypes.map((t) => ({
+        name: t.name,
+        price: toPrice(t.price),
+        totalQuantity: t.totalQuantity,
+        remainingQuantity: t.remainingQuantity,
+      })),
+    });
+  } catch (err) {
+    handleError(res, err);
+  }
+};
+
 const getAttendees = async (req, res) => {
   try {
     const event = await loadOwnedEvent(req);
@@ -410,7 +431,6 @@ const getAttendees = async (req, res) => {
   }
 };
 
-// GET /api/events/:id/calendar.ics — экспорт в iCalendar (SRS 4.11)
 const getEventCalendar = async (req, res) => {
   try {
     const event = await loadVisibleEvent(parseId(req.params.id), req.user);
@@ -431,5 +451,6 @@ module.exports = {
   activatePaidSales,
   getEventStats,
   getAttendees,
+  getEventAnalytics,
   getEventCalendar,
 };

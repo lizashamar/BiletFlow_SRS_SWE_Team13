@@ -5,7 +5,6 @@ const { generateQrHash } = require('../utils/qr');
 
 const MAX_TICKETS_PER_ORDER = 10;
 
-// Валидация и нормализация body: { eventId, items: [{ ticketTypeId, quantity, attendeeNames? }] }
 function parseOrderBody(body) {
   const { eventId, items } = body || {};
 
@@ -16,7 +15,7 @@ function parseOrderBody(body) {
     throw new HttpError(400, 'items must be a non-empty array');
   }
 
-  const merged = new Map(); // ticketTypeId -> { quantity, attendeeNames }
+  const merged = new Map();
   let totalQty = 0;
 
   for (const item of items) {
@@ -34,7 +33,7 @@ function parseOrderBody(body) {
     const prev = merged.get(ticketTypeId);
     if (prev) {
       prev.quantity += quantity;
-      prev.attendeeNames = undefined; // при слиянии дублей имена сбрасываем
+      prev.attendeeNames = undefined;
     } else {
       merged.set(ticketTypeId, { quantity, attendeeNames });
     }
@@ -47,7 +46,6 @@ function parseOrderBody(body) {
   return { eventId, items: [...merged.entries()].map(([ticketTypeId, v]) => ({ ticketTypeId, ...v })) };
 }
 
-// POST /api/orders
 exports.createOrder = async (req, res) => {
   try {
     const { eventId, items } = parseOrderBody(req.body);
@@ -63,8 +61,8 @@ exports.createOrder = async (req, res) => {
       if (!event || !event.isPublished) throw new HttpError(404, 'Event not found');
       if (event.endTime < new Date()) throw new HttpError(400, 'Event has already ended');
 
-      let totalCents = 0; // считаем в целых тиынах, чтобы не копить ошибки округления
-      const toIssue = []; // { ticketTypeId, attendeeName }
+      let totalCents = 0;
+      const toIssue = [];
 
       for (const item of items) {
         const tt = event.ticketTypes.find((t) => t.id === item.ticketTypeId);
@@ -75,7 +73,7 @@ exports.createOrder = async (req, res) => {
           throw new HttpError(403, 'Paid ticket sales are not active for this event');
         }
 
-        // Атомарное списание остатков: защита от overselling при параллельных заказах
+        // atomic decrement prevents overselling under concurrent orders
         const updated = await tx.ticketType.updateMany({
           where: { id: tt.id, remainingQuantity: { gte: item.quantity } },
           data: { remainingQuantity: { decrement: item.quantity } },
@@ -91,7 +89,6 @@ exports.createOrder = async (req, res) => {
         }
       }
 
-      // TODO: интеграция с платёжным шлюзом. Пока заказ сразу COMPLETED.
       const created = await tx.order.create({
         data: { userId: user.id, eventId, totalAmount: totalCents / 100, status: 'COMPLETED' },
       });
@@ -120,7 +117,6 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// GET /api/orders — заказы текущего пользователя
 exports.getMyOrders = async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
@@ -134,7 +130,6 @@ exports.getMyOrders = async (req, res) => {
   }
 };
 
-// GET /api/orders/:id
 exports.getOrderById = async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -144,7 +139,6 @@ exports.getOrderById = async (req, res) => {
       where: { id },
       include: { event: { select: { id: true, title: true, startTime: true } }, tickets: true },
     });
-    // 404 вместо 403, чтобы не раскрывать существование чужих заказов
     if (!order || (order.userId !== req.user.id && req.user.role !== 'PLATFORM_ADMIN')) {
       throw new HttpError(404, 'Order not found');
     }
@@ -154,8 +148,6 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// POST /api/orders/:id/refund — полный возврат / отмена заказа (SRS 4.9, UC5).
-// Доступно организатору события и PLATFORM_ADMIN. Платёж — симуляция, поэтому возврат тоже.
 exports.refundOrder = async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -175,19 +167,16 @@ exports.refundOrder = async (req, res) => {
         throw new HttpError(409, 'Order has checked-in tickets; undo the check-in before refunding');
       }
 
-      // Атомарный переход COMPLETED -> REFUNDED: два параллельных возврата не пройдут оба
       const flipped = await tx.order.updateMany({ where: { id, status: 'COMPLETED' }, data: { status: 'REFUNDED' } });
       if (flipped.count === 0) throw new HttpError(409, 'Order was already refunded');
 
       const isFree = Number(order.totalAmount) === 0;
-      // Если параллельный чек-ин успел сменить статус билета, откатываем всю транзакцию
       const upd = await tx.ticket.updateMany({
         where: { orderId: id, status: 'VALID' },
         data: { status: isFree ? 'CANCELLED' : 'REFUNDED' },
       });
       if (upd.count !== order.tickets.length) throw new HttpError(409, 'Ticket state changed, retry the refund');
 
-      // Возвращаем места в продажу
       const perType = new Map();
       for (const t of order.tickets) perType.set(t.ticketTypeId, (perType.get(t.ticketTypeId) || 0) + 1);
       for (const [ticketTypeId, qty] of perType) {

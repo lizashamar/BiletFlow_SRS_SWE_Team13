@@ -6,7 +6,6 @@ const { authenticate, authorize, ROLES } = require('../middleware/authMiddleware
 
 router.use(authenticate);
 
-// Алиас для мобильного приложения-сканера (должен идти раньше '/:id')
 router.post('/check-in', authorize(ROLES.ORGANIZER, ROLES.EVENT_ADMIN), checkinController.mobileCheckIn);
 
 router.get('/', authorize(ROLES.ATTENDEE), ticketController.getMyTickets);

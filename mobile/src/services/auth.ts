@@ -1,11 +1,11 @@
 import { apiRequest } from "./api";
 import type { LoginResponse } from "../types/auth";
 
-export async function loginEventAdmin(
+export async function loginStaff(
   email: string,
   password: string
 ): Promise<LoginResponse> {
-  return apiRequest<LoginResponse>("/api/auth/event-admin/login", {
+  return apiRequest<LoginResponse>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({
       email: email.trim().toLowerCase(),

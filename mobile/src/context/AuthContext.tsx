@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 
-import { loginEventAdmin } from "../services/auth";
+import { loginStaff } from "../services/auth";
 
 import {
   clearSession,
@@ -14,7 +14,13 @@ import {
   saveSession,
 } from "../storage/authStorage";
 
-import type { Session } from "../types/auth";
+import type { Session, UserRole } from "../types/auth";
+
+const SCANNER_ROLES: UserRole[] = [
+  "EVENT_ADMIN",
+  "ORGANIZER",
+  "PLATFORM_ADMIN",
+];
 
 type AuthContextValue = {
   session: Session | null;
@@ -39,7 +45,8 @@ export function AuthProvider({
     getSession()
       .then((storedSession) => {
         if (
-          storedSession?.user.role === "EVENT_ADMIN"
+          storedSession &&
+          SCANNER_ROLES.includes(storedSession.user.role)
         ) {
           setSession(storedSession);
         }
@@ -54,9 +61,9 @@ export function AuthProvider({
     password: string
   ) {
     const response =
-      await loginEventAdmin(email, password);
+      await loginStaff(email, password);
 
-    if (response.user.role !== "EVENT_ADMIN") {
+    if (!SCANNER_ROLES.includes(response.user.role)) {
       throw new Error(
         "This account is not authorized for ticket scanning."
       );

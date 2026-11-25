@@ -15,7 +15,8 @@
           "cameraPermission": "Allow BiletFlow Staff to access the camera to scan event tickets."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-status-bar"
     ]
   }
 }

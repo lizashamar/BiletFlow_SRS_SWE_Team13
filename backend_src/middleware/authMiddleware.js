@@ -8,8 +8,6 @@ const ROLES = Object.freeze({
   PLATFORM_ADMIN: 'PLATFORM_ADMIN',
 });
 
-// 1) Аутентификация: проверяет JWT из заголовка "Authorization: Bearer <token>"
-//    и кладёт { id, email, role } в req.user
 function authenticate(req, res, next) {
   const header = req.headers.authorization || '';
   const [scheme, token] = header.split(' ');
@@ -28,8 +26,6 @@ function authenticate(req, res, next) {
   }
 }
 
-// 2) Авторизация (RBAC): authorize(ROLES.ORGANIZER, ROLES.EVENT_ADMIN)
-//    PLATFORM_ADMIN имеет доступ ко всему.
 function authorize(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user) {
@@ -42,7 +38,6 @@ function authorize(...allowedRoles) {
   };
 }
 
-// 3) Необязательная аутентификация: без заголовка запрос анонимный, с заголовком токен обязан быть валидным.
 function optionalAuth(req, res, next) {
   if (!req.headers.authorization) return next();
   return authenticate(req, res, next);

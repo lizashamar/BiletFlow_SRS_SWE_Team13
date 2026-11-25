@@ -17,6 +17,26 @@ export async function saveManifest(
   );
 }
 
+export async function markCheckedInLocally(
+  eventId: number,
+  digest: string
+): Promise<void> {
+  const manifest = await getManifest(eventId);
+
+  if (!manifest) {
+    return;
+  }
+
+  await saveManifest({
+    ...manifest,
+    tickets: manifest.tickets.map((t) =>
+      t.digest.toLowerCase() === digest
+        ? { ...t, status: "CHECKED_IN" }
+        : t
+    ),
+  });
+}
+
 export async function getManifest(
   eventId: number
 ): Promise<OfflineManifest | null> {
