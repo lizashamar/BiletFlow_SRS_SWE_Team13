@@ -12,14 +12,18 @@ const at = (daysFromNow, hour, minutes = 0) => {
   return d;
 };
 
+const HOUR = 60 * 60 * 1000;
+const startOfHour = new Date(Math.floor(Date.now() / HOUR) * HOUR);
+const live = (hoursFromNow) => new Date(startOfHour.getTime() + hoursFromNow * HOUR);
+
 const EVENTS = [
   {
     title: 'Tech Conference Astana 2026',
     description: 'Talks on AI, cloud and startups in Kazakhstan.',
     venueName: 'Expo Congress Center',
     venueAddress: 'Mangilik El Ave 53/1, Astana',
-    startTime: at(3, 10),
-    endTime: at(3, 18),
+    startTime: live(-1),
+    endTime: live(24),
     capacity: 300,
     ticketTypes: [
       { name: 'Standard', price: 5000, totalQuantity: 200 },
@@ -104,6 +108,7 @@ async function main() {
     },
   });
 
+  console.log(`"${conference.title}" is live now: check-in open until ${conference.endTime.toLocaleString()}.`);
   console.log(`Seeded ${created.length} events. Accounts (password ${TEST_PASSWORD}):`);
   for (const a of ACCOUNTS) console.log(`  ${a.role.padEnd(15)} ${a.email}`);
 }

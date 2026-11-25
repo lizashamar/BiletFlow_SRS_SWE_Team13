@@ -6,11 +6,12 @@ import OrganizerDashboard from "./pages/OrganizerDashboard"
 import TicketPass from "./pages/TicketPass"
 import CheckIn from "./pages/CheckIn"
 import Login from "./pages/Login"
+import EventDetail from "./pages/EventDetail"
 import Icon from "./components/Icon"
 import { clearSession, getStoredUser } from "./api"
 import type { Event, Role, User } from "./api"
 
-type Page = "events" | "create" | "checkout" | "dashboard" | "ticket" | "checkin" | "login"
+type Page = "events" | "event" | "create" | "checkout" | "dashboard" | "ticket" | "checkin" | "login"
 
 const NAV: { page: Page; label: string; roles: Role[] | null }[] = [
   { page: "events", label: "Discover", roles: null },
@@ -35,6 +36,11 @@ function App() {
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [page])
+
+  const openEvent = (event: Event) => {
+    setSelectedEvent(event)
+    setPage("event")
+  }
 
   const openCheckout = (event: Event) => {
     setSelectedEvent(event)
@@ -94,14 +100,17 @@ function App() {
         </div>
       </nav>
 
-      {page === "events" && <EventCatalog onSelectEvent={openCheckout} />}
+      {page === "events" && <EventCatalog onSelectEvent={openEvent} />}
+      {page === "event" && selectedEvent && (
+        <EventDetail event={selectedEvent} onBack={() => setPage("events")} onBuy={openCheckout} />
+      )}
       {page === "login" && <Login onLoggedIn={handleLoggedIn} />}
       {page === "create" && <CreateEvent onCreated={() => setPage("dashboard")} />}
       {page === "checkout" && selectedEvent && (
         <TicketCheckout
           event={selectedEvent}
           user={user}
-          onBack={() => setPage("events")}
+          onBack={() => setPage("event")}
           onViewTickets={() => setPage("ticket")}
         />
       )}

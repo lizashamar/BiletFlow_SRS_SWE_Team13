@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api, errorText, money } from "../api"
+import EditEventForm from "../components/EditEventForm"
 
 type OrganizerEvent = {
   id: number
@@ -8,6 +9,9 @@ type OrganizerEvent = {
   endTime?: string
   status?: string
   venueName?: string
+  venueAddress?: string
+  description?: string | null
+  capacity?: number
   isPublished: boolean
 }
 type EventStats = {
@@ -24,6 +28,8 @@ type Attendee = {
   ticketType: string
   status: string
   buyerEmail: string
+  orderId: number
+  orderStatus: string
   registeredAt: string
   eventTitle: string
 }
@@ -43,6 +49,8 @@ function OrganizerDashboard() {
   const [error, setError] = useState("")
   const [period, setPeriod] = useState<"week" | "all">("week")
   const [selectedEvent, setSelectedEvent] = useState("all")
+  const [editing, setEditing] = useState<OrganizerEvent | null>(null)
+  const [notice, setNotice] = useState("")
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
@@ -74,6 +82,19 @@ function OrganizerDashboard() {
       await loadDashboard()
     } catch (err) {
       setError(errorText(err, "Could not update the event."))
+    }
+  }
+
+  const refund = async (a: Attendee) => {
+    if (!window.confirm(`Refund order #${a.orderId} (${a.buyerEmail})? All tickets in this order will be cancelled.`)) return
+    setError("")
+    setNotice("")
+    try {
+      const r = await api<{ tickets: number; amount: number }>(`/orders/${a.orderId}/refund`, { method: "POST" })
+      setNotice(`Order #${a.orderId} refunded: ${r.tickets} ticket(s), ${money(r.amount)} returned (simulated).`)
+      await loadDashboard()
+    } catch (err) {
+      setError(errorText(err, "Could not refund the order."))
     }
   }
 
@@ -126,11 +147,23 @@ function OrganizerDashboard() {
 
       {loading && <p>Loading your event analytics...</p>}
       {error && <p role="alert" style={errorBox}>{error}</p>}
+      {notice && <p role="status" className="success-box">{notice}</p>}
+      {editing && (
+        <EditEventForm
+          event={editing}
+          onCancel={() => setEditing(null)}
+          onSaved={() => {
+            setNotice(`“${editing.title}” updated.`)
+            setEditing(null)
+            void loadDashboard()
+          }}
+        />
+      )}
       {!loading && !error && analytics.length === 0 && (
         <section style={panel}><h2>No events yet</h2><p>Your event statistics will appear here after you create an event and receive orders.</p></section>
       )}
 
-      {!loading && !error && analytics.length > 0 && <>
+      {!loading && analytics.length > 0 && <>
         <div style={filterRow}>
           <label htmlFor="event-filter">Show statistics for</label>
           <select id="event-filter" value={selectedEvent} onChange={e => setSelectedEvent(e.target.value)} style={select}>
@@ -168,7 +201,7 @@ function OrganizerDashboard() {
         <section style={panel}>
           <h2>My Events</h2><div style={{ overflowX: "auto" }}>
             <table style={table}><thead><tr>
-              {["Event", "Date", "Tickets sold", "Capacity", "Net sales", "Check-in", "Visibility"].map(x => <th key={x} style={cell}>{x}</th>)}
+              {["Event", "Date", "Tickets sold", "Capacity", "Net sales", "Check-in", "Visibility", ""].map(x => <th key={x} style={cell}>{x}</th>)}
             </tr></thead><tbody>
               {visible.map(({ event, stats }) => <tr key={event.id}>
                 <td style={cell}><strong>{event.title}</strong><div style={small}>{event.venueName || ""}</div></td>
@@ -180,6 +213,9 @@ function OrganizerDashboard() {
                   <button onClick={() => void togglePublish(event)} style={smallButton}>
                     {event.isPublished ? "Unpublish" : "Publish"}
                   </button>
+                </td>
+                <td style={cell}>
+                  <button onClick={() => { setEditing(event); setError(""); setNotice(""); window.scrollTo(0, 0) }} style={smallButton}>Edit</button>
                 </td>
               </tr>)}
             </tbody></table>
@@ -207,11 +243,18 @@ function OrganizerDashboard() {
           <h2>Attendee List</h2>
           {attendees.length === 0 ? <p>No attendee records are available for these events yet.</p> : <div style={{ overflowX: "auto" }}>
             <table style={table}><thead><tr>
-              {["Name", "Email", "Event", "Ticket type", "Status", "Registered"].map(x => <th key={x} style={cell}>{x}</th>)}
+              {["Name", "Email", "Event", "Ticket type", "Status", "Registered", ""].map(x => <th key={x} style={cell}>{x}</th>)}
             </tr></thead><tbody>
               {attendees.map(a => <tr key={a.ticketId}>
                 <td style={cell}>{a.attendeeName}</td><td style={cell}>{a.buyerEmail}</td><td style={cell}>{a.eventTitle}</td>
                 <td style={cell}>{a.ticketType}</td><td style={cell}>{a.status}</td><td style={cell}>{dateLabel(a.registeredAt)}</td>
+                <td style={cell}>
+                  {a.orderStatus === "COMPLETED" && a.status === "VALID" ? (
+                    <button onClick={() => void refund(a)} style={smallButton}>Refund order #{a.orderId}</button>
+                  ) : a.orderStatus === "REFUNDED" ? (
+                    <span style={small}>Refunded</span>
+                  ) : null}
+                </td>
               </tr>)}
             </tbody></table>
           </div>}

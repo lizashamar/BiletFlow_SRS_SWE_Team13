@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Icon from "../components/Icon"
 import EventCover from "../components/EventCover"
-import { CATEGORIES, api, categoryOf, coverOf, errorText, shortDate } from "../api"
+import { CATEGORIES, api, categoryOf, coverOf, errorText, priceLabel, shortDate } from "../api"
 import type { Event } from "../api"
 
 type Props = {
@@ -10,8 +10,29 @@ type Props = {
 
 const ticketsLeft = (e: Event) => e.ticketTypes.reduce((s, t) => s + t.remainingQuantity, 0)
 
-const priceLabel = (e: Event) =>
-  e.price > 0 ? `from ₸ ${e.price.toLocaleString("ru-RU")}` : "Free entry"
+
+type DateFilter = "any" | "now" | "today" | "week" | "month"
+
+const DATE_FILTERS: { value: DateFilter; label: string }[] = [
+  { value: "any", label: "Any date" },
+  { value: "now", label: "Happening now" },
+  { value: "today", label: "Today" },
+  { value: "week", label: "Next 7 days" },
+  { value: "month", label: "Next 30 days" },
+]
+
+function matchesDate(e: Event, filter: DateFilter) {
+  if (filter === "any") return true
+  const now = new Date()
+  const start = new Date(e.startTime)
+  const end = new Date(e.endTime)
+  if (filter === "now") return start <= now && end >= now
+  const limit = new Date(now)
+  if (filter === "today") limit.setHours(23, 59, 59, 999)
+  if (filter === "week") limit.setDate(limit.getDate() + 7)
+  if (filter === "month") limit.setDate(limit.getDate() + 30)
+  return start <= limit && end >= now
+}
 
 function EventCatalog({ onSelectEvent }: Props) {
   const [events, setEvents] = useState<Event[]>([])
@@ -19,6 +40,7 @@ function EventCatalog({ onSelectEvent }: Props) {
   const [error, setError] = useState("")
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("All")
+  const [dateFilter, setDateFilter] = useState<DateFilter>("any")
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -37,8 +59,11 @@ function EventCatalog({ onSelectEvent }: Props) {
   }, [query])
 
   const visible = useMemo(
-    () => (category === "All" ? events : events.filter((e) => categoryOf(e.title) === category)),
-    [events, category]
+    () =>
+      events.filter(
+        (e) => (category === "All" || categoryOf(e.title) === category) && matchesDate(e, dateFilter)
+      ),
+    [events, category, dateFilter]
   )
   const presentCategories = CATEGORIES.filter((c) => events.some((e) => categoryOf(e.title) === c))
   const available = visible.filter((e) => ticketsLeft(e) > 0)
@@ -60,6 +85,14 @@ function EventCatalog({ onSelectEvent }: Props) {
               aria-label="Search events"
             />
           </label>
+          <label className="search-field date-field">
+            <Icon name="calendar" />
+            <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value as DateFilter)} aria-label="Filter by date">
+              {DATE_FILTERS.map((d) => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="chips">
@@ -73,7 +106,7 @@ function EventCatalog({ onSelectEvent }: Props) {
 
       {loading && events.length === 0 && <p className="muted">Loading events...</p>}
       {error && <p role="alert" className="error-box">{error}</p>}
-      {!loading && !error && visible.length === 0 && <p className="muted">No upcoming events match your search.</p>}
+      {!loading && !error && visible.length === 0 && <p className="muted">No events match these filters.</p>}
 
       {featured && (
         <>
@@ -86,6 +119,7 @@ function EventCatalog({ onSelectEvent }: Props) {
             <div className="cover-pattern" />
             <div>
               <span className="badge">{categoryOf(featured.title)}</span>
+              {featured.status === "ACTIVE" && <span className="badge live-badge">● Live now</span>}
               <h2>{featured.title}</h2>
               <div className="meta">
                 <span><Icon name="calendar" /> {shortDate(featured.startTime)}</span>
@@ -106,8 +140,8 @@ function EventCatalog({ onSelectEvent }: Props) {
             {visible.map((event) => {
               const left = ticketsLeft(event)
               return (
-                <article key={event.id} className="event-card">
-                  <EventCover title={event.title} />
+                <article key={event.id} className="event-card" onClick={() => onSelectEvent(event)}>
+                  <EventCover title={event.title} live={event.status === "ACTIVE"} />
                   <div className="event-body">
                     <h3>{event.title}</h3>
                     <div className="meta" style={{ flexDirection: "column" }}>
@@ -119,7 +153,7 @@ function EventCatalog({ onSelectEvent }: Props) {
                         <small>{left > 0 ? `${left} tickets left` : "sold out"}</small>
                         <strong>{priceLabel(event)}</strong>
                       </div>
-                      <button className="primary-button small-button" disabled={left === 0} onClick={() => onSelectEvent(event)}>
+                      <button className="primary-button small-button" disabled={left === 0}>
                         {left > 0 ? "Get Tickets" : "Sold out"}
                       </button>
                     </div>

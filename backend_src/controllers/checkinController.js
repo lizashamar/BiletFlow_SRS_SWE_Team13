@@ -6,13 +6,14 @@ const { audit } = require('../utils/audit');
 const QR_RE = /^[A-Za-z0-9_-]{8,255}$/;
 const MAX_SYNC_BATCH = 200;
 const MAX_OFFLINE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const CHECKIN_OPENS_BEFORE_MS = 3 * 60 * 60 * 1000;
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const isQr = (v) => typeof v === 'string' && QR_RE.test(v);
 
 const ticketInclude = {
   ticketType: { select: { name: true } },
-  order: { select: { status: true, event: { select: { id: true, title: true, organizerId: true } } } },
+  order: { select: { status: true, event: { select: { id: true, title: true, organizerId: true, startTime: true, endTime: true } } } },
 };
 
 function assertCanManageEvent(user, event) {
@@ -27,6 +28,16 @@ function assertTicketUsable(ticket) {
   }
   if (['CANCELLED', 'REFUNDED'].includes(ticket.status)) {
     throw new HttpError(403, `Ticket is not valid (${ticket.status})`);
+  }
+}
+
+function assertCheckInWindow(event, at) {
+  const opensAt = new Date(new Date(event.startTime).getTime() - CHECKIN_OPENS_BEFORE_MS);
+  if (at < opensAt) {
+    throw new HttpError(403, `Check-in is not open yet (opens ${opensAt.toISOString()})`);
+  }
+  if (at > new Date(event.endTime)) {
+    throw new HttpError(403, 'Check-in is closed: the event has ended');
   }
 }
 
@@ -69,7 +80,9 @@ async function processTicket(user, ticket, { eventId, scannedAt } = {}) {
   if (ticket.status === 'CHECKED_IN') {
     return { ...base, outcome: 'ALREADY_CHECKED_IN', checkedInAt: await firstCheckInAt(ticket.id) };
   }
-  const created = await markCheckedIn(ticket.id, user.id, scannedAt || new Date());
+  const at = scannedAt || new Date();
+  assertCheckInWindow(event, at);
+  const created = await markCheckedIn(ticket.id, user.id, at);
   if (!created) {
     return { ...base, outcome: 'ALREADY_CHECKED_IN', checkedInAt: await firstCheckInAt(ticket.id) };
   }
@@ -147,7 +160,7 @@ exports.mobileCheckIn = async (req, res) => {
     } catch (err) {
       if (!(err instanceof HttpError)) throw err;
       if (err.status === 404) return res.json({ status: 'INVALID', message: 'Invalid QR code' });
-      if (err.status === 403 && /different event|not valid/.test(err.message)) {
+      if (err.status === 403 && /different event|not valid|Check-in is/.test(err.message)) {
         return res.json({ status: 'CANCELLED', message: err.message });
       }
       throw err;
