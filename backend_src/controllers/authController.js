@@ -6,8 +6,6 @@ const { HttpError, handleError } = require('../utils/httpError');
 const { audit } = require('../utils/audit');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// Самостоятельно регистрироваться можно только как attendee / organizer.
-// EVENT_ADMIN и PLATFORM_ADMIN выдаются только вручную.
 const SELF_REGISTER_ROLES = ['ATTENDEE', 'ORGANIZER'];
 
 function signToken(user) {
@@ -16,7 +14,6 @@ function signToken(user) {
 
 const publicUser = (u) => ({ id: u.id, name: u.fullName, email: u.email, role: u.role });
 
-// POST /api/auth/login { email, password }
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body || {};
@@ -25,7 +22,6 @@ exports.login = async (req, res) => {
     }
 
     const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
-    // Один и тот же ответ для «нет пользователя» и «неверный пароль» — не раскрываем наличие аккаунта.
     const ok = user ? await bcrypt.compare(password, user.passwordHash).catch(() => false) : false;
     if (!ok) throw new HttpError(401, 'Invalid email or password');
 
@@ -35,7 +31,6 @@ exports.login = async (req, res) => {
   }
 };
 
-// POST /api/auth/register { email, password, fullName, role? }
 exports.register = async (req, res) => {
   try {
     const { email, password, fullName, role = 'ATTENDEE' } = req.body || {};
@@ -62,13 +57,11 @@ exports.register = async (req, res) => {
     audit('user.register', user, { userId: user.id });
     return res.status(201).json({ message: 'Registered', token: signToken(user), user: publicUser(user) });
   } catch (err) {
-    // гонка двух регистраций с одним email -> unique violation
     if (err && err.code === 'P2002') return handleError(res, new HttpError(409, 'Email already registered'));
     return handleError(res, err);
   }
 };
 
-// GET /api/auth/me
 exports.me = async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });

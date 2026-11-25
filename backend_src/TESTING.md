@@ -18,13 +18,14 @@ Real DB accounts for manual / Postman testing: `node backend_src/scripts/seedAcc
 | 7 | Malformed JSON gave an HTML 500 page; unknown routes gave HTML 404; no CORS for the web frontend | JSON error handlers + CORS |
 | 8 | JWT secret silently defaulted to `supersecretkey` in production | Throws if `JWT_SECRET` missing when `NODE_ENV=production` |
 | 9 | Order totals used `Decimal` helpers (breaks without generated client) | Integer-cent arithmetic |
+| 10 | `/api/events/:id/analytics` had no ownership check (any organizer could read any event's revenue) and opened a second Prisma pool | Moved into `eventController`, owner-only, covered by a test |
 
 ## Known issues NOT fixable inside `backend_src/` (need schema / other-folder changes)
 
 1. **No Staff Assignment table** (SRS 4.8 "view only assigned events"): any EVENT_ADMIN can scan any event. Needs a `StaffAssignment` model in `prisma/schema.prisma`.
 2. **No audit_logs table** (SRS 4.9/4.16): audit events are written to stdout as `[AUDIT] {json}` (`utils/audit.js`).
 3. **No Payment/Refund/Cancelled-event models**: payments are simulated, refund = order `REFUNDED` + tickets `REFUNDED`/`CANCELLED`.
-4. `prisma/seed.js` still creates users with an unusable hash and no seat/promo/support entities; use `scripts/seedAccounts.js`.
+4. ~~`prisma/seed.js` created unusable hashes~~ fixed: `npx prisma db seed` now creates working accounts and future demo events.
 5. Offline conflict policy is "first sync wins" (the earlier physical scan is not preferred when two devices sync out of order).
 6. Mobile `scanCache.ts` only caches recent scans; it does not yet download `/api/checkin/manifest/:eventId` or upload a queue to `/api/checkin/sync`. Backend endpoints are ready and tested; the client side is outside backend scope.
 7. In-memory test DB approximates PostgreSQL; run the suite once against a real DB before the demo.

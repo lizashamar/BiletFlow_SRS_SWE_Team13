@@ -1,8 +1,6 @@
-// Минимальный генератор iCalendar (RFC 5545) для SRS 4.11.
 const esc = (s) => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const stamp = (d) => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
-// строки >75 октетов переносятся (CRLF + пробел)
 function fold(line) {
   const out = [];
   let cur = '';
@@ -24,7 +22,6 @@ function buildEventIcs(event, { baseUrl = '' } = {}) {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    // стабильный UID: обновлённый файл заменяет прежнюю запись в календаре
     `UID:event-${event.id}@biletflow.kz`,
     `DTSTAMP:${stamp(new Date())}`,
     `DTSTART:${stamp(event.startTime)}`,

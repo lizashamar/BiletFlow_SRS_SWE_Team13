@@ -8,7 +8,7 @@ const checkinRoutes = require('./routes/checkinRoutes');
 const { cors, notFound, errorHandler } = require('./middleware/common');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 5000;
 
 app.disable('x-powered-by');
 app.use(cors);
@@ -27,10 +27,10 @@ app.use('/api/checkin', checkinRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-
+// exported for tests; listens only when run directly
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`Сервер запущен на http://localhost:${PORT}`);
+    console.log(`BiletFlow API listening on http://localhost:${PORT}`);
   });
 }
 

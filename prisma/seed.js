@@ -1,5 +1,52 @@
+require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
+const { seedAccounts, ACCOUNTS, TEST_PASSWORD } = require('../backend_src/scripts/seedAccounts');
+const { generateQrHash } = require('../backend_src/utils/qr');
+
 const prisma = new PrismaClient();
+
+const DAY = 24 * 60 * 60 * 1000;
+const at = (daysFromNow, hour, minutes = 0) => {
+  const d = new Date(Date.now() + daysFromNow * DAY);
+  d.setHours(hour, minutes, 0, 0);
+  return d;
+};
+
+const EVENTS = [
+  {
+    title: 'Tech Conference Astana 2026',
+    description: 'Talks on AI, cloud and startups in Kazakhstan.',
+    venueName: 'Expo Congress Center',
+    venueAddress: 'Mangilik El Ave 53/1, Astana',
+    startTime: at(3, 10),
+    endTime: at(3, 18),
+    capacity: 300,
+    ticketTypes: [
+      { name: 'Standard', price: 5000, totalQuantity: 200 },
+      { name: 'VIP', price: 15000, totalQuantity: 50 },
+    ],
+  },
+  {
+    title: 'Jazz Night Almaty',
+    description: 'Live jazz quartet and guests.',
+    venueName: 'Kazakhconcert Hall',
+    venueAddress: 'Abylai Khan Ave 83, Almaty',
+    startTime: at(10, 19),
+    endTime: at(10, 22),
+    capacity: 120,
+    ticketTypes: [{ name: 'Standard', price: 8000, totalQuantity: 100 }],
+  },
+  {
+    title: 'University Open Day',
+    description: 'Free campus tour and student project showcase.',
+    venueName: 'Main Atrium',
+    venueAddress: 'Kabanbay Batyr Ave 53, Astana',
+    startTime: at(1, 11),
+    endTime: at(1, 16),
+    capacity: 300,
+    ticketTypes: [{ name: 'Free entry', price: 0, totalQuantity: 300 }],
+  },
+];
 
 async function main() {
   console.log('Cleaning up database...');
@@ -8,94 +55,57 @@ async function main() {
   await prisma.order.deleteMany();
   await prisma.ticketType.deleteMany();
   await prisma.event.deleteMany();
-  await prisma.user.deleteMany();
 
-  console.log('Seeding users...');
-  const organizer = await prisma.user.create({
-    data: {
-      email: 'organizer@biletflow.kz',
-      passwordHash: '$2b$10$e8R...hash_placeholder',
-      fullName: 'Avenue Events KZ',
-      role: 'ORGANIZER',
-    },
-  });
+  const users = await seedAccounts(prisma);
 
-  const attendee = await prisma.user.create({
-    data: {
-      email: 'alisher@example.com',
-      passwordHash: '$2b$10$e8R...hash_placeholder',
-      fullName: 'Alisher Akturin',
-      role: 'ATTENDEE',
-    },
-  });
+  const created = [];
+  for (const e of EVENTS) {
+    const hasPaid = e.ticketTypes.some((t) => t.price > 0);
+    created.push(
+      await prisma.event.create({
+        data: {
+          organizerId: users.organizer.id,
+          title: e.title,
+          description: e.description,
+          venueName: e.venueName,
+          venueAddress: e.venueAddress,
+          startTime: e.startTime,
+          endTime: e.endTime,
+          capacity: e.capacity,
+          isPublished: true,
+          paidSalesActive: hasPaid,
+          ticketTypes: {
+            create: e.ticketTypes.map((t) => ({
+              name: t.name,
+              price: t.price,
+              isPaid: t.price > 0,
+              totalQuantity: t.totalQuantity,
+              remainingQuantity: t.totalQuantity,
+            })),
+          },
+        },
+        include: { ticketTypes: true },
+      })
+    );
+  }
 
-  const scannerAdmin = await prisma.user.create({
+  const conference = created[0];
+  const standard = conference.ticketTypes.find((t) => t.name === 'Standard');
+  await prisma.ticketType.update({ where: { id: standard.id }, data: { remainingQuantity: { decrement: 1 } } });
+  await prisma.order.create({
     data: {
-      email: 'scanner1@biletflow.kz',
-      passwordHash: '$2b$10$e8R...hash_placeholder',
-      fullName: 'Gate Staff 1',
-      role: 'EVENT_ADMIN',
-    },
-  });
-
-  console.log('Seeding event...');
-  const event = await prisma.event.create({
-    data: {
-      organizerId: organizer.id,
-      title: 'bts Concert Astana',
-      description: 'Live performance in Astana Arena',
-      venueName: 'Astana Arena',
-      venueAddress: 'Kabanbay Batyr Str 53, Astana',
-      startTime: new Date('2026-10-15T20:00:00Z'),
-      endTime: new Date('2026-10-15T23:00:00Z'),
-      capacity: 10000,
-      isPublished: true,
-      paidSalesActive: true,
-    },
-  });
-
-  console.log('Seeding ticket types...');
-  const vipType = await prisma.ticketType.create({
-    data: {
-      eventId: event.id,
-      name: 'VIP Fan Zone',
-      price: 25000.00,
-      totalQuantity: 500,
-      remainingQuantity: 499,
-      isPaid: true,
-    },
-  });
-
-  console.log('Seeding order...');
-  const order = await prisma.order.create({
-    data: {
-      userId: attendee.id,
-      eventId: event.id,
-      totalAmount: 25000.00,
+      userId: users.attendee2.id,
+      eventId: conference.id,
+      totalAmount: standard.price,
       status: 'COMPLETED',
+      tickets: {
+        create: [{ ticketTypeId: standard.id, attendeeName: users.attendee2.fullName, qrCodeHash: generateQrHash() }],
+      },
     },
   });
 
-  console.log('Seeding ticket...');
-  const ticket = await prisma.ticket.create({
-    data: {
-      orderId: order.id,
-      ticketTypeId: vipType.id,
-      attendeeName: 'Alisher Akturin',
-      qrCodeHash: 'BF_QR_HASH_991823712893',
-      status: 'VALID',
-    },
-  });
-
-  console.log('Seeding test check-in record...');
-  await prisma.checkIn.create({
-    data: {
-      ticketId: ticket.id,
-      scannedBy: scannerAdmin.id,
-    },
-  });
-
-  console.log('Seeding finished successfully!');
+  console.log(`Seeded ${created.length} events. Accounts (password ${TEST_PASSWORD}):`);
+  for (const a of ACCOUNTS) console.log(`  ${a.role.padEnd(15)} ${a.email}`);
 }
 
 main()
@@ -103,6 +113,4 @@ main()
     console.error(e);
     process.exit(1);
   })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .finally(() => prisma.$disconnect());

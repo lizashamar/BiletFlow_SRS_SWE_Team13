@@ -12,7 +12,6 @@ const ticketInclude = {
   },
 };
 
-// GET /api/tickets?status=VALID — билеты текущего пользователя (с qrCodeHash для отрисовки QR)
 exports.getMyTickets = async (req, res) => {
   try {
     const where = { order: { userId: req.user.id, status: 'COMPLETED' } };
@@ -32,7 +31,6 @@ exports.getMyTickets = async (req, res) => {
   }
 };
 
-// GET /api/tickets/:id
 exports.getTicketById = async (req, res) => {
   try {
     const id = Number(req.params.id);

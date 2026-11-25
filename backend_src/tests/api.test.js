@@ -1,6 +1,3 @@
-// Интеграционные тесты событий, заказов и check-in (+ офлайн-синхронизация) по ролям из SRS.
-// Запуск:  node --test backend_src/tests
-// БД — in-memory (tests/helpers/fakePrisma.js), аккаунты — scripts/seedAccounts.js.
 process.env.JWT_SECRET = 'test-secret';
 process.env.AUDIT_SILENT = '1';
 process.env.RATE_LIMIT_DISABLED = '1';
@@ -20,7 +17,7 @@ let server;
 let base;
 let users;
 let tokens;
-let ids; // { event, draft, otherEvent, free, paid, ... }
+let ids;
 
 const DAY = 24 * 3600 * 1000;
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -34,7 +31,7 @@ async function api(method, path, { token, body, raw } = {}) {
   if (raw) return res;
   const text = await res.text();
   let json = null;
-  try { json = JSON.parse(text); } catch { /* not json */ }
+  try { json = JSON.parse(text); } catch {}
   return { status: res.status, body: json, text };
 }
 
@@ -77,7 +74,6 @@ test.beforeEach(async () => {
   ids = { event: event.id, draft: draft.id, otherEvent: otherEvent.id, free: free.id, paid: paid.id };
 });
 
-// ---------------------------------------------------------------- AUTH / RBAC
 test('auth: every seeded role can log in and receives its role', async () => {
   for (const [key, u] of Object.entries(users)) {
     const r = await api('POST', '/api/auth/login', { body: { email: u.email, password: TEST_PASSWORD } });
@@ -137,7 +133,6 @@ test('rbac: missing/invalid/expired token -> 401; wrong role -> 403', async () =
   assert.equal((await api('POST', '/api/tickets/check-in', { token: tokens.attendee, body: { qrToken: 'x'.repeat(10) } })).status, 403);
 });
 
-// ---------------------------------------------------------------- EVENTS
 const newEventBody = (over = {}) => ({
   title: 'Spring Fest', description: 'Fun', venueName: 'Palace', venueAddress: 'Almaty',
   startTime: new Date(Date.now() + 10 * DAY).toISOString(), endTime: new Date(Date.now() + 11 * DAY).toISOString(),
@@ -187,7 +182,7 @@ test('events: create validation (missing fields, dates, capacity, quantities, ne
   assert.equal(await bad({ startTime: 'not-a-date' }), 400);
   assert.equal(await bad({ endTime: new Date(Date.now() + 9 * DAY).toISOString() }), 400);
   assert.equal(await bad({ capacity: 0 }), 400);
-  assert.equal(await bad({ capacity: 10 }), 400); // 70 билетов > 10 мест
+  assert.equal(await bad({ capacity: 10 }), 400);
   assert.equal(await bad({ ticketTypes: [] }), 400);
   assert.equal(await bad({ ticketTypes: [{ name: 'X', price: -1, totalQuantity: 5 }] }), 400);
   assert.equal(await bad({ ticketTypes: [{ name: 'X', price: 1, totalQuantity: 0 }] }), 400);
@@ -214,7 +209,6 @@ test('events: paid-sales activation needs checklist, is simulated, and unlocks p
   await api('PATCH', `/api/events/${id}`, { token: tokens.organizer, body: { isPublished: true } });
   const paidId = c.body.event.ticketTypes[1].id;
 
-  // до активации платный билет купить нельзя
   const before = await order(tokens.attendee, [{ ticketTypeId: paidId, quantity: 1 }], id);
   assert.equal(before.status, 403);
 
@@ -230,7 +224,7 @@ test('events: paid-sales activation needs checklist, is simulated, and unlocks p
   assert.equal((await order(tokens.attendee, [{ ticketTypeId: paidId, quantity: 1 }], id)).status, 201);
 });
 
-test('events: stats & attendees are owner-only and reflect sales / refunds / check-ins', async () => {
+test('events: stats, attendees & analytics are owner-only and reflect sales / refunds / check-ins', async () => {
   const o1 = await order(tokens.attendee, [{ ticketTypeId: ids.paid, quantity: 2 }, { ticketTypeId: ids.free, quantity: 1 }]);
   const o2 = await order(tokens.attendee2, [{ ticketTypeId: ids.paid, quantity: 1 }]);
   assert.equal(o1.status, 201);
@@ -254,7 +248,13 @@ test('events: stats & attendees are owner-only and reflect sales / refunds / che
   assert.equal((await api('GET', `/api/events/${ids.event}/attendees?status=CHECKED_IN`, { token: tokens.organizer })).body.total, 1);
   assert.equal((await api('GET', `/api/events/${ids.event}/attendees?status=BOGUS`, { token: tokens.organizer })).status, 400);
 
-  for (const p of ['stats', 'attendees']) {
+  const an = await api('GET', `/api/events/${ids.event}/analytics`, { token: tokens.organizer });
+  assert.equal(an.status, 200);
+  assert.equal(an.body.totalRevenue, 50000);
+  assert.equal(an.body.totalSoldTickets, 3);
+  assert.equal(an.body.checkedInCount, 1);
+
+  for (const p of ['stats', 'attendees', 'analytics']) {
     assert.equal((await api('GET', `/api/events/${ids.event}/${p}`, { token: tokens.organizer2 })).status, 403);
     assert.equal((await api('GET', `/api/events/${ids.event}/${p}`, { token: tokens.attendee })).status, 403);
     assert.equal((await api('GET', `/api/events/${ids.event}/${p}`)).status, 401);
@@ -274,7 +274,6 @@ test('events: calendar .ics export has stable UID, times and location', async ()
   assert.equal((await api('GET', `/api/events/${ids.draft}/calendar.ics`)).status, 404);
 });
 
-// ---------------------------------------------------------------- ORDERS
 test('orders: free registration creates zero-value COMPLETED order with unique QR tickets', async () => {
   const r = await order(tokens.attendee, [{ ticketTypeId: ids.free, quantity: 2, attendeeNames: ['Aigerim', 'Dana'] }]);
   assert.equal(r.status, 201);
@@ -316,7 +315,6 @@ test('orders: unpublished and already-ended events cannot be ordered', async () 
 
 test('orders: no overselling - sold-out -> 409 and failed order rolls back earlier stock deductions', async () => {
   assert.equal((await order(tokens.attendee, [{ ticketTypeId: ids.paid, quantity: 4 }])).status, 409);
-  // второй элемент не проходит -> первый (free x2) тоже откатывается
   const r = await order(tokens.attendee, [{ ticketTypeId: ids.free, quantity: 2 }, { ticketTypeId: ids.paid, quantity: 4 }]);
   assert.equal(r.status, 409);
   assert.equal((await db.ticketType.findUnique({ where: { id: ids.free } })).remainingQuantity, 5);
@@ -359,7 +357,7 @@ test('refund: owner refunds, tickets invalidated, stock restored; scanning refun
   assert.equal((await api('GET', `/api/orders/${oid}`, { token: tokens.attendee })).body.status, 'REFUNDED');
   const scan = await api('POST', '/api/checkin/verify', { token: tokens.scanner, body: { qrCodeHash: o.body.order.tickets[0].qrCodeHash } });
   assert.equal(scan.status, 403);
-  assert.equal((await api('POST', `/api/orders/${oid}/refund`, { token: tokens.organizer })).status, 409); // повторный возврат
+  assert.equal((await api('POST', `/api/orders/${oid}/refund`, { token: tokens.organizer })).status, 409);
   assert.equal((await api('POST', '/api/orders/9999/refund', { token: tokens.organizer })).status, 404);
 });
 
@@ -376,7 +374,6 @@ test('refund: free registration is cancelled; checked-in order cannot be refunde
   assert.equal((await api('POST', `/api/orders/${o.body.order.id}/refund`, { token: tokens.organizer })).status, 200);
 });
 
-// ---------------------------------------------------------------- CHECK-IN
 async function ticketFor(eventTypeId = ids.free, buyer = tokens.attendee, names) {
   const r = await order(buyer, [{ ticketTypeId: eventTypeId, quantity: 1, ...(names ? { attendeeNames: names } : {}) }]);
   assert.equal(r.status, 201);
@@ -428,7 +425,6 @@ test('check-in: wrong event, other organizer, pending order and unauthenticated 
   const o = await db.order.create({ data: { userId: users.attendee.id, eventId: ids.event, totalAmount: 5, status: 'PENDING' } });
   await db.ticket.create({ data: { orderId: o.id, ticketTypeId: ids.free, attendeeName: 'P', qrCodeHash: 'p'.repeat(64) } });
   assert.equal((await api('POST', '/api/checkin/verify', { token: tokens.scanner, body: { qrCodeHash: 'p'.repeat(64) } })).status, 403);
-  // владелец-организатор может сканировать сам
   assert.equal((await api('POST', '/api/checkin/verify', { token: tokens.organizer, body: { qrCodeHash: t.qrCodeHash } })).status, 200);
 });
 
@@ -472,7 +468,6 @@ test('check-in: scanner event list (organizer sees own, event admin sees publish
   assert.deepEqual(adm.body.map((e) => e.title).sort(), ['Main Event', 'Other Organizer Event']);
 });
 
-// ---------------------------------------------------------------- OFFLINE
 test('offline: manifest exposes SHA-256 of QR (never the raw QR), is no-store and event-scoped', async () => {
   const t = await ticketFor();
   const r = await api('GET', `/api/checkin/manifest/${ids.event}`, { token: tokens.scanner, raw: true });
@@ -538,13 +533,11 @@ test('offline sync: request validation and authorization', async () => {
   assert.equal((await s({ eventId: '1', scans: [{ qrCodeHash: 'a'.repeat(64) }] })).status, 400);
   assert.equal((await s({ eventId: ids.event, scans: [{ qrCodeHash: 'a'.repeat(64) }] }, tokens.attendee)).status, 403);
   assert.equal((await s({ eventId: ids.event, scans: [{ qrCodeHash: 'a'.repeat(64) }] }, null)).status, 401);
-  // организатор другого события: каждый скан отклоняется
   const t = await ticketFor();
   const r = await s({ eventId: ids.event, scans: [{ qrCodeHash: t.qrCodeHash }] }, tokens.organizer2);
   assert.equal(r.body.results[0].status, 'REJECTED');
 });
 
-// ---------------------------------------------------------------- MOBILE ALIAS
 test('mobile alias POST /api/tickets/check-in: VALID / ALREADY_CHECKED_IN / INVALID / CANCELLED, always HTTP 200', async () => {
   const t = await ticketFor(ids.free, tokens.attendee, ['Mobile Guest']);
   const call = (qrToken, token = tokens.scanner) => api('POST', '/api/tickets/check-in', { token, body: { qrToken } });
@@ -565,7 +558,6 @@ test('mobile alias POST /api/tickets/check-in: VALID / ALREADY_CHECKED_IN / INVA
   assert.equal(refunded.status, 200);
   assert.equal(refunded.body.status, 'CANCELLED');
 
-  // чужой организатор получает настоящий 403, а не «неверный QR»
   const t2 = await ticketFor();
   assert.equal((await call(t2.qrCodeHash, tokens.organizer2)).status, 403);
 });

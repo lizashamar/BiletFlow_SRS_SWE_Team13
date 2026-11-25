@@ -3,9 +3,6 @@ const prisma = require('../db');
 const { HttpError, handleError } = require('../utils/httpError');
 const { audit } = require('../utils/audit');
 
-// QR-токен: 64 hex (генерируется utils/qr.js), но допускаем и более ранние/сидовые значения
-// вида BF_QR_HASH_123 — колонка qr_code_hash это VarChar(255). Формат проверяем, чтобы не
-// гонять мусор в БД; подлинность определяет только точное совпадение в таблице tickets.
 const QR_RE = /^[A-Za-z0-9_-]{8,255}$/;
 const MAX_SYNC_BATCH = 200;
 const MAX_OFFLINE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -18,9 +15,6 @@ const ticketInclude = {
   order: { select: { status: true, event: { select: { id: true, title: true, organizerId: true } } } },
 };
 
-// Организатор управляет только своими событиями (EVENT_ADMIN / PLATFORM_ADMIN — любыми).
-// ВАЖНО: в схеме БД нет таблицы staff_assignments, поэтому EVENT_ADMIN пока не ограничен
-// «назначенными» событиями (SRS 4.8) — см. docs/known issues в отчёте.
 function assertCanManageEvent(user, event) {
   if (user.role === 'ORGANIZER' && event.organizerId !== user.id) {
     throw new HttpError(403, 'You can only manage check-in for your own events');
@@ -36,7 +30,6 @@ function assertTicketUsable(ticket) {
   }
 }
 
-// Время офлайн-скана приходит с телефона: не доверяем слепо (будущее / слишком старое -> now)
 function sanitizeScannedAt(value) {
   const now = Date.now();
   const t = value ? Date.parse(value) : NaN;
@@ -49,8 +42,7 @@ async function firstCheckInAt(ticketId) {
   return first ? first.scannedAt : null;
 }
 
-// Атомарный переход VALID -> CHECKED_IN. Возвращает запись CheckIn или null, если билет уже использован.
-// Если два сканера бьют в один билет одновременно, count=1 получит только один.
+// atomic VALID -> CHECKED_IN: two scanners on one ticket, only one wins
 function markCheckedIn(ticketId, scannerId, scannedAt) {
   return prisma.$transaction(async (tx) => {
     const updated = await tx.ticket.updateMany({
@@ -62,7 +54,6 @@ function markCheckedIn(ticketId, scannerId, scannedAt) {
   });
 }
 
-// Общая логика для /verify, /sync, /manual и мобильного алиаса. Бросает HttpError для невалидных билетов.
 async function processTicket(user, ticket, { eventId, scannedAt } = {}) {
   const event = ticket.order.event;
   assertCanManageEvent(user, event);
@@ -109,7 +100,6 @@ async function loadManageableEvent(user, raw) {
   return event;
 }
 
-// POST /api/checkin/verify  { qrCodeHash, eventId? }
 exports.verifyTicket = async (req, res) => {
   try {
     const { qrCodeHash, eventId } = req.body || {};
@@ -140,10 +130,7 @@ exports.verifyTicket = async (req, res) => {
   }
 };
 
-// POST /api/tickets/check-in  { qrToken, eventId? }
-// Совместимость с мобильным приложением (mobile/src/services/checkIn.ts): ответ всегда 200
-// с полем status = VALID | INVALID | ALREADY_CHECKED_IN | CANCELLED, т.к. клиент считает
-// любой не-2xx ответ сетевой ошибкой и уходит в офлайн-режим.
+// mobile client treats any non-2xx as offline, so this always answers 200 with a status
 exports.mobileCheckIn = async (req, res) => {
   try {
     const { qrToken, eventId } = req.body || {};
@@ -162,18 +149,16 @@ exports.mobileCheckIn = async (req, res) => {
     } catch (err) {
       if (!(err instanceof HttpError)) throw err;
       if (err.status === 404) return res.json({ status: 'INVALID', message: 'Invalid QR code' });
-      // чужое событие / отменён / возвращён — билет существует, но войти нельзя
       if (err.status === 403 && /different event|not valid/.test(err.message)) {
         return res.json({ status: 'CANCELLED', message: err.message });
       }
-      throw err; // 403 на чужое мероприятие организатора и т.п.
+      throw err;
     }
   } catch (err) {
     return handleError(res, err);
   }
 };
 
-// GET /api/checkin/events — события, доступные сканеру (SRS 4.8: «выбор события»)
 exports.getScannerEvents = async (req, res) => {
   try {
     const where = req.user.role === 'ORGANIZER' ? { organizerId: req.user.id } : { isPublished: true };
@@ -188,7 +173,6 @@ exports.getScannerEvents = async (req, res) => {
   }
 };
 
-// GET /api/checkin/stats/:eventId — зарегистрировано / отмечено (SRS 4.8)
 exports.getStats = async (req, res) => {
   try {
     const event = await loadManageableEvent(req.user, req.params.eventId);
@@ -212,7 +196,6 @@ exports.getStats = async (req, res) => {
   }
 };
 
-// GET /api/checkin/search/:eventId?q=name — ручной поиск гостя (SRS 4.8)
 exports.searchAttendees = async (req, res) => {
   try {
     const event = await loadManageableEvent(req.user, req.params.eventId);
@@ -242,7 +225,6 @@ async function loadTicketById(ticketId) {
   return ticket;
 }
 
-// POST /api/checkin/manual  { ticketId, eventId? } — отметка вручную после поиска
 exports.manualCheckIn = async (req, res) => {
   try {
     const { ticketId, eventId } = req.body || {};
@@ -257,7 +239,6 @@ exports.manualCheckIn = async (req, res) => {
   }
 };
 
-// POST /api/checkin/undo  { ticketId } | { qrCodeHash } — отмена ошибочной отметки (SRS 4.8, UC4)
 exports.undoCheckIn = async (req, res) => {
   try {
     const { ticketId, qrCodeHash } = req.body || {};
@@ -274,8 +255,6 @@ exports.undoCheckIn = async (req, res) => {
     const reverted = await prisma.$transaction(async (tx) => {
       const upd = await tx.ticket.updateMany({ where: { id: ticket.id, status: 'CHECKED_IN' }, data: { status: 'VALID' } });
       if (upd.count === 0) return false;
-      // Записи check_ins удаляем, иначе «время первого входа» после повторного сканирования будет неверным.
-      // Факт отмены сохраняется в аудит-логе.
       await tx.checkIn.deleteMany({ where: { ticketId: ticket.id } });
       return true;
     });
@@ -288,9 +267,7 @@ exports.undoCheckIn = async (req, res) => {
   }
 };
 
-// GET /api/checkin/manifest/:eventId
-// Список билетов события для офлайн-кэша сканера. Вместо секретных QR-хэшей отдаём
-// их SHA-256: украденный телефон не позволит подделать билеты, а сканер сверяет sha256(QR).
+// offline manifest ships sha256(QR), never the raw QR tokens
 exports.getManifest = async (req, res) => {
   try {
     const event = await loadManageableEvent(req.user, req.params.eventId);
@@ -316,10 +293,6 @@ exports.getManifest = async (req, res) => {
   }
 };
 
-// POST /api/checkin/sync  { eventId, scans: [{ qrCodeHash, scannedAt }] }
-// Выгрузка сканов, сделанных офлайн. Каждый скан проходит ту же атомарную проверку,
-// поэтому двойной проход на двух офлайн-устройствах отсекается на втором синке.
-// Повторная отправка той же пачки безопасна (идемпотентно): уже отмеченные -> ALREADY_CHECKED_IN.
 exports.syncCheckins = async (req, res) => {
   try {
     const { eventId, scans } = req.body || {};
@@ -346,7 +319,6 @@ exports.syncCheckins = async (req, res) => {
           results.push({ qrCodeHash, status: 'REJECTED', reason: err.message });
         } else {
           console.error(err);
-          // ERROR = временная ошибка сервера, клиент оставит скан в очереди
           results.push({ qrCodeHash, status: 'ERROR', reason: 'Server error' });
         }
       }

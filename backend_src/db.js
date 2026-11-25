@@ -1,5 +1,4 @@
-// Единый PrismaClient на всё приложение (раньше каждый контроллер создавал свой пул соединений).
-// Тесты подменяют клиент in-memory реализацией через global.__BILETFLOW_PRISMA__.
+// tests inject an in-memory client here
 if (global.__BILETFLOW_PRISMA__) {
   module.exports = global.__BILETFLOW_PRISMA__;
 } else {
