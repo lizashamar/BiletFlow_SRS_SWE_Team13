@@ -1,4 +1,3 @@
-// tests inject an in-memory client here
 if (global.__BILETFLOW_PRISMA__) {
   module.exports = global.__BILETFLOW_PRISMA__;
 } else {

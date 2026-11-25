@@ -73,7 +73,6 @@ exports.createOrder = async (req, res) => {
           throw new HttpError(403, 'Paid ticket sales are not active for this event');
         }
 
-        // atomic decrement prevents overselling under concurrent orders
         const updated = await tx.ticketType.updateMany({
           where: { id: tt.id, remainingQuantity: { gte: item.quantity } },
           data: { remainingQuantity: { decrement: item.quantity } },

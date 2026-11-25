@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
-import { api, dateTime, errorText } from "../api"
+import EventCover from "../components/EventCover"
+import { api, errorText, shortDate } from "../api"
 
 type Ticket = {
   id: number
@@ -56,53 +57,63 @@ function TicketPass() {
   }
 
   return (
-    <main className="page-container ticket-page">
+    <main className="page-container">
       <style>{`
         @media print {
           .app-nav, .no-print { display: none !important; }
-          body { background: white !important; }
-          .ticket-card { box-shadow: none !important; border: 2px solid #111827 !important; break-inside: avoid; }
+          .ticket-card { box-shadow: none !important; break-inside: avoid; }
         }
       `}</style>
 
       <div className="no-print page-header">
         <div>
+          <p className="eyebrow">Wallet</p>
           <h1>My Tickets</h1>
-          <p className="muted">Show the QR code at the entrance. You can print or save tickets as PDF.</p>
+          <p className="muted" style={{ margin: 0 }}>Show the QR code at the entrance. You can print or save tickets as PDF.</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="secondary-button" onClick={() => void load()} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh"}
           </button>
           {tickets.length > 0 && (
-            <button className="primary-button" style={{ marginTop: 0 }} onClick={() => window.print()}>
+            <button className="primary-button" onClick={() => window.print()}>
               Print / Save as PDF
             </button>
           )}
         </div>
       </div>
 
-      {loading && tickets.length === 0 && <p>Loading your tickets...</p>}
+      {loading && tickets.length === 0 && <p className="muted">Loading your tickets...</p>}
       {error && <p role="alert" className="error-box">{error}</p>}
-      {!loading && !error && tickets.length === 0 && <p>You have no tickets yet. Buy one from the Events page.</p>}
+      {!loading && !error && tickets.length === 0 && (
+        <section className="panel">
+          <h3>No tickets yet</h3>
+          <p className="muted">Buy a ticket on the Discover page and it will appear here with its QR code.</p>
+        </section>
+      )}
 
       {tickets.map((t) => (
         <section key={t.id} className="ticket-card">
-          <div className="ticket-info">
-            <p className="brand">BILETFLOW</p>
-            <h2>{t.order.event.title}</h2>
-            <p><strong>Attendee:</strong> {t.attendeeName}</p>
-            <p><strong>Ticket:</strong> BF-{t.id} · {t.ticketType.name}</p>
-            <p><strong>Date:</strong> {dateTime(t.order.event.startTime)}</p>
-            <p><strong>Venue:</strong> {t.order.event.venueName}, {t.order.event.venueAddress}</p>
-            <p>
-              <strong>Status:</strong>{" "}
-              <span className={`status-badge status-${t.status.toLowerCase()}`}>{STATUS_LABEL[t.status]}</span>
-            </p>
+          <div className="ticket-main">
+            <EventCover title={t.order.event.title} height={90} />
+            <div className="ticket-info">
+              <h2>{t.order.event.title}</h2>
+              <div className="ticket-fields">
+                <div><small>Attendee</small>{t.attendeeName}</div>
+                <div><small>Ticket</small>BF-{t.id} · {t.ticketType.name}</div>
+                <div><small>Date</small>{shortDate(t.order.event.startTime)}</div>
+                <div><small>Venue</small>{t.order.event.venueName}</div>
+                <div>
+                  <small>Status</small>
+                  <span className={`status-badge status-${t.status.toLowerCase()}`}>{STATUS_LABEL[t.status]}</span>
+                </div>
+                <div><small>Order</small>#{t.order.id}</div>
+              </div>
+            </div>
           </div>
           <div className="ticket-qr">
             {t.status === "VALID" || t.status === "CHECKED_IN" ? (
-              <QRCodeSVG value={t.qrCodeHash} size={168} />
+              <QRCodeSVG value={t.qrCodeHash} size={172} bgColor="transparent" />
             ) : (
               <p className="muted">QR disabled</p>
             )}

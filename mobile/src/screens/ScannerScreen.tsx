@@ -108,7 +108,6 @@ export default function ScannerScreen() {
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
 
   const syncingRef = useRef(false);
-  // camera fires several callbacks per QR before state updates; lock synchronously
   const scanLockRef = useRef(false);
 
   const selectedEvent = events.find((e) => e.id === eventId);

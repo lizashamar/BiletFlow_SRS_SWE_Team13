@@ -95,11 +95,12 @@ function CreateEvent({ onCreated }: Props) {
 
   return (
     <main className="page-container narrow">
+      <p className="eyebrow">Organizer</p>
       <h1>Create an Event</h1>
       <p className="muted">Enter the details for your next event.</p>
 
       <form className="panel" onSubmit={handleSubmit}>
-        <label htmlFor="title">Event title</label>
+        <label htmlFor="title" style={{ marginTop: 0 }}>Event title</label>
         <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={255} />
 
         <label htmlFor="description">Description</label>
@@ -132,7 +133,7 @@ function CreateEvent({ onCreated }: Props) {
             <input aria-label="Price" type="number" min={0} step="0.01" placeholder="Price ₸" value={t.price} onChange={(e) => updateType(i, "price", e.target.value)} required />
             <input aria-label="Quantity" type="number" min={1} step={1} placeholder="Qty" value={t.totalQuantity} onChange={(e) => updateType(i, "totalQuantity", e.target.value)} required />
             {ticketTypes.length > 1 && (
-              <button type="button" className="secondary-button" onClick={() => setTicketTypes((l) => l.filter((_, idx) => idx !== i))}>
+              <button type="button" className="secondary-button small-button" onClick={() => setTicketTypes((l) => l.filter((_, idx) => idx !== i))}>
                 ✕
               </button>
             )}
@@ -140,7 +141,7 @@ function CreateEvent({ onCreated }: Props) {
         ))}
         <button
           type="button"
-          className="secondary-button"
+          className="secondary-button small-button"
           onClick={() => setTicketTypes((l) => [...l, { name: "", price: "0", totalQuantity: "10" }])}
         >
           + Add ticket type
@@ -168,7 +169,7 @@ function CreateEvent({ onCreated }: Props) {
         {error && <p role="alert" className="error-box">{error}</p>}
         {message && <p role="status" className="success-box">{message}</p>}
 
-        <button type="submit" className="primary-button" disabled={loading}>
+        <button type="submit" className="primary-button block" disabled={loading}>
           {loading ? "Saving..." : "Create Event"}
         </button>
       </form>

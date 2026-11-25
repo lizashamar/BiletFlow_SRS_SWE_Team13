@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import type { FormEvent } from "react"
+import Icon from "../components/Icon"
 import { ApiError, api, dateTime, errorText } from "../api"
 
 type ScannerEvent = { id: number; title: string; venueName: string; startTime: string }
@@ -75,13 +76,14 @@ function CheckIn() {
 
   return (
     <main className="page-container narrow">
+      <p className="eyebrow">Gate</p>
       <h1>Ticket Check-in</h1>
       <p className="muted">Paste or type the code from the attendee's ticket. The mobile app scans the same code with the camera.</p>
 
       {error && <p role="alert" className="error-box">{error}</p>}
 
       <form className="panel" onSubmit={verify}>
-        <label htmlFor="event">Event</label>
+        <label htmlFor="event" style={{ marginTop: 0 }}>Event</label>
         <select id="event" value={eventId} onChange={(e) => setEventId(e.target.value)} required>
           {events.map((ev) => (
             <option key={ev.id} value={ev.id}>
@@ -100,23 +102,28 @@ function CheckIn() {
           required
         />
 
-        <button type="submit" className="primary-button" disabled={loading || !eventId}>
-          {loading ? "Checking..." : "Verify & check in"}
+        <button type="submit" className="primary-button block" disabled={loading || !eventId}>
+          <Icon name="scan" /> {loading ? "Checking..." : "Verify & check in"}
         </button>
       </form>
 
       {result && (
         <div role="status" className={`scan-result scan-${result.kind}`}>
-          <strong>{result.kind === "ok" ? "✔" : "✖"} {result.title}</strong>
-          {result.detail && <p style={{ margin: "6px 0 0" }}>{result.detail}</p>}
+          <span className="scan-icon">
+            <Icon name={result.kind === "ok" ? "check" : "x"} size={28} />
+          </span>
+          <div>
+            <strong>{result.title}</strong>
+            {result.detail && <p style={{ margin: "4px 0 0" }}>{result.detail}</p>}
+          </div>
         </div>
       )}
 
       {stats && (
         <section className="stats-grid" style={{ marginTop: 20 }}>
-          <div className="panel stat"><span className="muted">Registered</span><strong>{stats.registered}</strong></div>
-          <div className="panel stat"><span className="muted">Checked in</span><strong>{stats.checkedIn}</strong></div>
-          <div className="panel stat"><span className="muted">Not yet arrived</span><strong>{stats.remaining}</strong></div>
+          <div className="dashboard-card stat"><span className="muted">Registered</span><strong>{stats.registered}</strong></div>
+          <div className="dashboard-card stat"><span className="muted">Checked in</span><strong>{stats.checkedIn}</strong></div>
+          <div className="dashboard-card stat"><span className="muted">Not yet arrived</span><strong>{stats.remaining}</strong></div>
         </section>
       )}
     </main>

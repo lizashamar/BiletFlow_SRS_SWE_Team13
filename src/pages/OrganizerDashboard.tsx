@@ -115,8 +115,9 @@ function OrganizerDashboard() {
     <main style={page}>
       <div style={header}>
         <div>
-          <h1 style={{ marginBottom: 8 }}>Organizer Dashboard</h1>
-          <p style={{ color: "#64748b", marginTop: 0 }}>Track your events, ticket sales, revenue and attendees.</p>
+          <p className="eyebrow">Organizer</p>
+          <h1 style={{ marginBottom: 8 }}>Dashboard</h1>
+          <p className="muted" style={{ marginTop: 0 }}>Track your events, ticket sales, revenue and attendees.</p>
         </div>
         <button onClick={() => void loadDashboard()} disabled={loading} style={button}>
           {loading ? "Refreshing..." : "Refresh"}
@@ -220,25 +221,25 @@ function OrganizerDashboard() {
   )
 }
 
-const page = { maxWidth: "1200px", margin: "0 auto", padding: "32px 24px", fontFamily: "Arial, sans-serif", color: "#111827" }
+const page = { maxWidth: "1120px", margin: "0 auto", padding: "40px 24px 64px" }
 const header = { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" as const, gap: "16px" }
 const filterRow = { display: "flex", alignItems: "center", gap: "10px", marginTop: "20px" }
-const cards = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "16px", margin: "24px 0" }
-const card = { background: "#fff", padding: "22px", borderRadius: "12px", border: "1px solid #e2e8f0" }
-const panel = { background: "#fff", padding: "24px", marginTop: "24px", borderRadius: "12px", border: "1px solid #e2e8f0", overflow: "hidden" as const }
-const label = { color: "#64748b", margin: 0 }
-const number = { fontSize: "26px", marginBottom: 0 }
-const chart = { display: "flex", alignItems: "flex-end", gap: "12px", minHeight: "250px", padding: "24px 8px 8px", overflowX: "auto" as const, borderBottom: "1px solid #e2e8f0" }
+const cards = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", margin: "24px 0" }
+const card = { background: "#fff", padding: "20px", borderRadius: "16px", border: "1px solid #e5e7eb" }
+const panel = { background: "#fff", padding: "24px", marginTop: "24px", borderRadius: "16px", border: "1px solid #e5e7eb", overflow: "hidden" as const }
+const label = { color: "#6b7280", margin: 0, fontSize: "14px" }
+const number = { fontFamily: "Georgia, serif", fontSize: "30px", margin: "6px 0 0" }
+const chart = { display: "flex", alignItems: "flex-end", gap: "12px", minHeight: "250px", padding: "24px 8px 8px", overflowX: "auto" as const, borderBottom: "1px solid #e5e7eb" }
 const barColumn = { display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "flex-end", flex: "1 0 90px", gap: "7px", height: "230px" }
-const bar = { width: "min(42px, 85%)", background: "#2563eb", borderRadius: "6px 6px 0 0", minHeight: "4px", transition: "height 0.25s ease" }
-const barValue = { fontSize: "11px", color: "#475569", whiteSpace: "nowrap" as const }
-const dayText = { fontSize: "12px", color: "#64748b", whiteSpace: "nowrap" as const }
-const small = { color: "#64748b", fontSize: "12px" }
-const button = { padding: "10px 16px", border: 0, borderRadius: "8px", background: "#2563eb", color: "white", cursor: "pointer" }
-const smallButton = { padding: "4px 10px", border: "1px solid #cbd5e1", borderRadius: "6px", background: "white", cursor: "pointer" }
-const select = { padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "white" }
-const errorBox = { padding: "12px 16px", borderRadius: "8px", background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }
+const bar = { width: "min(44px, 85%)", background: "#0b0b12", borderRadius: "8px 8px 2px 2px", minHeight: "4px", transition: "height 0.25s ease" }
+const barValue = { fontSize: "11px", color: "#374151", whiteSpace: "nowrap" as const }
+const dayText = { fontSize: "12px", color: "#6b7280", whiteSpace: "nowrap" as const }
+const small = { color: "#6b7280", fontSize: "12px" }
+const button = { padding: "10px 18px", border: 0, borderRadius: "12px", background: "#0b0b12", color: "white", cursor: "pointer", fontWeight: 600 }
+const smallButton = { padding: "4px 12px", border: "1px solid #e5e7eb", borderRadius: "999px", background: "white", cursor: "pointer" }
+const select = { padding: "10px 14px", borderRadius: "12px", border: "1px solid #e5e7eb", background: "white" }
+const errorBox = { padding: "12px 16px", borderRadius: "12px", background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }
 const table = { width: "100%", borderCollapse: "collapse" as const, textAlign: "left" as const }
-const cell = { padding: "12px", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" as const }
+const cell = { padding: "12px", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap" as const }
 
 export default OrganizerDashboard

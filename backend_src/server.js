@@ -27,7 +27,6 @@ app.use('/api/checkin', checkinRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-// exported for tests; listens only when run directly
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`BiletFlow API listening on http://localhost:${PORT}`);

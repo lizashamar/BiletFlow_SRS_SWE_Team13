@@ -42,7 +42,6 @@ async function firstCheckInAt(ticketId) {
   return first ? first.scannedAt : null;
 }
 
-// atomic VALID -> CHECKED_IN: two scanners on one ticket, only one wins
 function markCheckedIn(ticketId, scannerId, scannedAt) {
   return prisma.$transaction(async (tx) => {
     const updated = await tx.ticket.updateMany({
@@ -130,7 +129,6 @@ exports.verifyTicket = async (req, res) => {
   }
 };
 
-// mobile client treats any non-2xx as offline, so this always answers 200 with a status
 exports.mobileCheckIn = async (req, res) => {
   try {
     const { qrToken, eventId } = req.body || {};
@@ -267,7 +265,6 @@ exports.undoCheckIn = async (req, res) => {
   }
 };
 
-// offline manifest ships sha256(QR), never the raw QR tokens
 exports.getManifest = async (req, res) => {
   try {
     const event = await loadManageableEvent(req.user, req.params.eventId);

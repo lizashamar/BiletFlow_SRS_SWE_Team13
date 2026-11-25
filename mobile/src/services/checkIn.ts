@@ -37,7 +37,6 @@ export async function getOfflineManifest(
   };
 }
 
-// /api/tickets/check-in answers 200 with a status for every scan outcome
 export async function verifyTicketOnline(
   qrToken: string,
   eventId: number,

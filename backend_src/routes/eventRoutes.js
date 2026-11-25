@@ -6,7 +6,6 @@ const { authenticate, optionalAuth, authorize, ROLES } = require('../middleware/
 const organizerOnly = [authenticate, authorize(ROLES.ORGANIZER)];
 
 router.get('/', eventController.getEvents);
-// static paths must stay above '/:id'
 router.get('/mine', ...organizerOnly, eventController.getMyEvents);
 router.post('/', ...organizerOnly, eventController.createEvent);
 
