@@ -108,6 +108,8 @@ export default function ScannerScreen() {
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
 
   const syncingRef = useRef(false);
+  // camera fires several callbacks per QR before state updates; lock synchronously
+  const scanLockRef = useRef(false);
 
   const selectedEvent = events.find((e) => e.id === eventId);
 
@@ -278,9 +280,10 @@ export default function ScannerScreen() {
   }
 
   async function handleBarcodeScanned(result: BarcodeScanningResult) {
-    if (scannedValue || eventId === null) {
+    if (scanLockRef.current || eventId === null) {
       return;
     }
+    scanLockRef.current = true;
 
     const qrToken = result.data.trim();
 
@@ -327,6 +330,9 @@ export default function ScannerScreen() {
     setScannedValue(null);
     setScanStatus(null);
     setStatusMessage("");
+    setTimeout(() => {
+      scanLockRef.current = false;
+    }, 800);
   }
 
   if (!permission) {
