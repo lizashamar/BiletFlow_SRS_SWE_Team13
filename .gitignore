@@ -154,3 +154,4 @@ vite.config.ts.timestamp-*
 .windsurf/
 skills-lock.json
 .DS_Store
+.expo/

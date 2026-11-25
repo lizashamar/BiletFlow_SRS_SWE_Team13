@@ -30,7 +30,7 @@ Backend tests (no database needed): `node --test backend_src/tests/api.test.js`
 
 ## Mobile scanner (Expo)
 
-1. Install **Expo Go** (SDK 57) on the phone; phone and laptop must be on the same Wi-Fi.
+1. Install **Expo Go** (latest, SDK 58) on the phone; phone and laptop must be on the same Wi-Fi.
 2. Find the laptop IP (`ipconfig` → IPv4) and create `mobile/.env`:
    ```
    EXPO_PUBLIC_API_URL=http://<laptop-ip>:5000
